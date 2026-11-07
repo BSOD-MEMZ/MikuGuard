@@ -1,0 +1,128 @@
+<ci:ComponentBase x:TypeArguments="models:CameraIndicatorSettings"
+    x:Class="MikuGuard.Views.Components.CameraIndicatorSettingsControl"
+    x:Name="SettingsRoot"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:ci="http://classisland.tech/schemas/xaml/core"
+    xmlns:models="clr-namespace:MikuGuard.Models"
+    xmlns:fa="clr-namespace:FluentAvalonia.UI.Controls;assembly=FluentAvalonia"
+    xmlns:local="clr-namespace:MikuGuard.Views.Components"
+    mc:Ignorable="d"
+    d:DesignHeight="420" d:DesignWidth="520">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  DataContext="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType=local:CameraIndicatorSettingsControl}}">
+        <StackPanel Classes="settings-container animated-intro">
+
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE790;}"
+                                 Header="圆点颜色"
+                                 Description="支持 #RRGGBB 或 #AARRGGBB，例如 #FF43A047。">
+                <fa:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Ellipse Width="22" Height="22" Fill="{Binding DotBrush}" VerticalAlignment="Center" />
+                        <TextBox Width="120" Text="{Binding Settings.DotColor, Mode=TwoWay}" />
+                    </StackPanel>
+                </fa:SettingsExpander.Footer>
+                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+                    <Button Content="绿" Tag="#FF43A047" Click="OnPresetDotColor" />
+                    <Button Content="青" Tag="#FF00BCD4" Click="OnPresetDotColor" />
+                    <Button Content="蓝" Tag="#FF2979FF" Click="OnPresetDotColor" />
+                    <Button Content="紫" Tag="#FF7C4DFF" Click="OnPresetDotColor" />
+                    <Button Content="橙" Tag="#FFFF9800" Click="OnPresetDotColor" />
+                    <Button Content="红" Tag="#FFE53935" Click="OnPresetDotColor" />
+                </StackPanel>
+            </fa:SettingsExpander>
+
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE7E8;}"
+                                 Header="外圈描边"
+                                 Description="圆点外围的描边颜色。设成 #00FFFFFF（全透明）即不描边。">
+                <fa:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Ellipse Width="22" Height="22" Stroke="{Binding RingBrush}" StrokeThickness="2"
+                                 VerticalAlignment="Center" />
+                        <TextBox Width="120" Text="{Binding Settings.RingColor, Mode=TwoWay}" />
+                    </StackPanel>
+                </fa:SettingsExpander.Footer>
+            </fa:SettingsExpander>
+
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE392;}"
+                                 Header="图标字形"
+                                 Description="Fluent 图标字符（如 &#xE392; 是摄像头）。留空则不显示图标。">
+                <fa:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <ci:FluentIcon Glyph="{Binding GlyphPreview}" FontSize="16"
+                                       Foreground="{Binding IconBrush}" VerticalAlignment="Center" />
+                        <TextBox Width="80" Text="{Binding Settings.IconGlyph, Mode=TwoWay}" />
+                        <TextBox Width="110" Text="{Binding Settings.IconColor, Mode=TwoWay}" ToolTip.Tip="图标颜色" />
+                    </StackPanel>
+                </fa:SettingsExpander.Footer>
+                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+                    <Button Content="摄像头" Tag="&#xE392;" Click="OnPresetGlyph" />
+                    <Button Content="摄像机" Tag="&#xE714;" Click="OnPresetGlyph" />
+                    <Button Content="锁" Tag="&#xE72E;" Click="OnPresetGlyph" />
+                    <Button Content="眼睛" Tag="&#xE890;" Click="OnPresetGlyph" />
+                    <Button Content="无图标" Tag="" Click="OnPresetGlyph" />
+                </StackPanel>
+            </fa:SettingsExpander>
+
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE740;}"
+                                 Header="小圆点尺寸"
+                                 Description="收缩后的圆点直径（像素）。">
+                <fa:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Slider Width="140" Minimum="4" Maximum="32" TickFrequency="1"
+                                Value="{Binding Settings.DotSize, Mode=TwoWay}" />
+                        <TextBlock Width="46" VerticalAlignment="Center"
+                                   Text="{Binding Settings.DotSize, StringFormat='{}{0:0} px'}" />
+                    </StackPanel>
+                </fa:SettingsExpander.Footer>
+            </fa:SettingsExpander>
+
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE8A9;}"
+                                 Header="展开尺寸"
+                                 Description="刚检测到摄像头时放大显示的直径（用于露出图标）。">
+                <fa:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Slider Width="140" Minimum="8" Maximum="64" TickFrequency="2"
+                                Value="{Binding Settings.ExpandedSize, Mode=TwoWay}" />
+                        <TextBlock Width="46" VerticalAlignment="Center"
+                                   Text="{Binding Settings.ExpandedSize, StringFormat='{}{0:0} px'}" />
+                    </StackPanel>
+                </fa:SettingsExpander.Footer>
+            </fa:SettingsExpander>
+
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE916;}"
+                                 Header="展开停留时间"
+                                 Description="放大状态保持多久后收缩为小圆点。0 表示一直保持放大。">
+                <fa:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Slider Width="140" Minimum="0" Maximum="10000" TickFrequency="250"
+                                Value="{Binding Settings.ExpandHoldMs, Mode=TwoWay}" />
+                        <TextBlock Width="70" VerticalAlignment="Center"
+                                   Text="{Binding Settings.ExpandHoldMs, StringFormat='{}{0} ms'}" />
+                    </StackPanel>
+                </fa:SettingsExpander.Footer>
+            </fa:SettingsExpander>
+
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE9A9;}"
+                                 Header="呼吸闪烁"
+                                 Description="摄像头持续被使用时圆点缓慢明暗呼吸。">
+                <fa:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.Pulse, Mode=TwoWay}" />
+                </fa:SettingsExpander.Footer>
+            </fa:SettingsExpander>
+
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE946;}"
+                                 Header="悬停提示"
+                                 Description="鼠标移到指示点上时显示是哪个程序在用摄像头。">
+                <fa:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.ShowAppTooltip, Mode=TwoWay}" />
+                </fa:SettingsExpander.Footer>
+            </fa:SettingsExpander>
+
+        </StackPanel>
+    </ScrollViewer>
+
+</ci:ComponentBase>

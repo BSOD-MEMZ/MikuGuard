@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>MikuGuard</AssemblyName>
+    <RootNamespace>MikuGuard</RootNamespace>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <CreateCipx>true</CreateCipx>
+    <!-- 版本信息手写在 AssemblyInfo.cs 里 -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <!-- tools\ 下的独立探针项目不参与插件编译 -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);tools\**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ClassIsland.PluginSdk" Version="2.0.0.2">
+      <ExcludeAssets>runtime;native</ExcludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <!--
+    cipx 包体优化：宿主自带 Microsoft.Windows.SDK.NET.dll / WinRT.Runtime.dll，
+    打完包后把这两个大件移回去，保证 bin 产物完整（本地部署依赖）。
+  -->
+  <Target Name="TrimCipxInput" BeforeTargets="CreateCipx">
+    <PropertyGroup>
+      <_CipxStaging>$(BaseIntermediateOutputPath)cipx-staging\</_CipxStaging>
+    </PropertyGroup>
+    <MakeDir Directories="$(_CipxStaging)" />
+    <Move SourceFiles="$(OutputPath)Microsoft.Windows.SDK.NET.dll" DestinationFolder="$(_CipxStaging)" Condition="Exists('$(OutputPath)Microsoft.Windows.SDK.NET.dll')" />
+    <Move SourceFiles="$(OutputPath)WinRT.Runtime.dll" DestinationFolder="$(_CipxStaging)" Condition="Exists('$(OutputPath)WinRT.Runtime.dll')" />
+    <Move SourceFiles="$(OutputPath)$(AssemblyName).pdb" DestinationFolder="$(_CipxStaging)" Condition="Exists('$(OutputPath)$(AssemblyName).pdb')" />
+  </Target>
+  <Target Name="RestoreCipxInput" AfterTargets="CreateCipx">
+    <Move SourceFiles="$(_CipxStaging)Microsoft.Windows.SDK.NET.dll" DestinationFolder="$(OutputPath)" Condition="Exists('$(_CipxStaging)Microsoft.Windows.SDK.NET.dll')" />
+    <Move SourceFiles="$(_CipxStaging)WinRT.Runtime.dll" DestinationFolder="$(OutputPath)" Condition="Exists('$(_CipxStaging)WinRT.Runtime.dll')" />
+    <Move SourceFiles="$(_CipxStaging)$(AssemblyName).pdb" DestinationFolder="$(OutputPath)" Condition="Exists('$(_CipxStaging)$(AssemblyName).pdb')" />
+  </Target>
+
+  <ItemGroup>
+    <None Update="manifest.yml" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="README.md" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="icon.png" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

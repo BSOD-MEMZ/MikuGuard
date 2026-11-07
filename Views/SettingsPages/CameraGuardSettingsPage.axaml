@@ -1,0 +1,243 @@
+<ci:SettingsPageBase
+    x:Class="MikuGuard.Views.SettingsPages.CameraGuardSettingsPage"
+    x:Name="RootPage"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:ci="http://classisland.tech/schemas/xaml/core"
+    xmlns:fa="clr-namespace:FluentAvalonia.UI.Controls;assembly=FluentAvalonia"
+    xmlns:models="clr-namespace:MikuGuard.Models"
+    xmlns:services="clr-namespace:MikuGuard.Services"
+    xmlns:vm="clr-namespace:MikuGuard.ViewModels"
+    mc:Ignorable="d"
+    d:DesignHeight="640" d:DesignWidth="860"
+    d:DataContext="{d:DesignInstance vm:CameraGuardSettingsViewModel}">
+
+    <ScrollViewer>
+        <StackPanel Classes="settings-container animated-intro">
+
+            <!-- 当前状态 -->
+            <fa:InfoBar IsOpen="True" IsClosable="False" Severity="Informational"
+                        Title="当前状态"
+                        Message="{Binding StatusText}" />
+
+            <!-- ============ 监控 ============ -->
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE7B3;}"
+                                 Header="启用摄像头守护"
+                                 Description="检测到摄像头被调用时，让指示点亮起并弹出提醒。">
+                <fa:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.Monitor.Enabled, Mode=TwoWay}" />
+                </fa:SettingsExpander.Footer>
+            </fa:SettingsExpander>
+
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE916;}"
+                                 Header="检测间隔"
+                                 Description="轮询摄像头状态的频率。越小越灵敏，越费电。">
+                <fa:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Slider Width="150" Minimum="400" Maximum="6000" TickFrequency="100"
+                                Value="{Binding Settings.Monitor.PollingIntervalMs, Mode=TwoWay}" />
+                        <TextBlock Width="66" VerticalAlignment="Center"
+                                   Text="{Binding Settings.Monitor.PollingIntervalMs, StringFormat='{}{0} ms'}" />
+                    </StackPanel>
+                </fa:SettingsExpander.Footer>
+            </fa:SettingsExpander>
+
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE392;}"
+                                 Header="监视哪一个摄像头"
+                                 Description="选「任意摄像头」时只要系统里有程序调用摄像头就会提醒。">
+                <fa:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <ComboBox Width="240"
+                                  ItemsSource="{Binding Devices}"
+                                  SelectedItem="{Binding SelectedDevice, Mode=TwoWay}">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Name}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <Button Content="刷新" Command="{Binding RefreshDevicesCommand}" />
+                    </StackPanel>
+                </fa:SettingsExpander.Footer>
+            </fa:SettingsExpander>
+
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE7BA;}"
+                                 Header="严格匹配所选摄像头"
+                                 Description="开启：只有选中的那台被占用才提醒。关闭：任意摄像头被调用都提醒。">
+                <fa:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.Monitor.StrictDeviceMatch, Mode=TwoWay}" />
+                </fa:SettingsExpander.Footer>
+            </fa:SettingsExpander>
+
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE72E;}"
+                                 Header="恢复被禁用的摄像头"
+                                 Description="「关闭摄像头」按钮会禁用设备，这里可以重新启用（需要管理员权限）。">
+                <fa:SettingsExpander.Footer>
+                    <Button Content="恢复摄像头设备" Command="{Binding RestoreCameraCommand}" />
+                </fa:SettingsExpander.Footer>
+            </fa:SettingsExpander>
+
+            <!-- ============ 程序过滤 ============ -->
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE71C;}"
+                                 Header="程序过滤"
+                                 Description="决定哪些程序使用摄像头时需要提醒。"
+                                 IsExpanded="True">
+                <StackPanel Spacing="10" Margin="0,8,0,4">
+
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <TextBlock Text="匹配模式" VerticalAlignment="Center" />
+                        <ComboBox Width="200" SelectedIndex="{Binding ModeIndex, Mode=TwoWay}">
+                            <ComboBoxItem Content="黑名单：名单内不提醒" />
+                            <ComboBoxItem Content="白名单：只提醒名单内" />
+                            <ComboBoxItem Content="全部提醒（不看名单）" />
+                        </ComboBox>
+                    </StackPanel>
+
+                    <TextBlock Text="名单（可填完整路径、exe 文件名或 UWP 包族名）"
+                               FontSize="12" Opacity="0.7" />
+
+                    <ItemsControl ItemsSource="{Binding Settings.Filter.Entries}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid ColumnDefinitions="*,Auto" Margin="0,3">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding DisplayName}" />
+                                        <TextBlock Text="{Binding Match}" FontSize="11" Opacity="0.6"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Content="移除" VerticalAlignment="Center"
+                                            Click="OnRemoveEntryClick" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBox Width="360" Watermark="例如 Zoom.exe 或 C:\Program Files\Zoom\bin\Zoom.exe"
+                                 Text="{Binding NewEntryText, Mode=TwoWay}" />
+                        <Button Content="添加" Command="{Binding AddEntryCommand}" />
+                        <Button Content="浏览 exe…" Click="OnBrowseExeClick" />
+                    </StackPanel>
+                </StackPanel>
+            </fa:SettingsExpander>
+
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE9D9;}"
+                                 Header="正在使用摄像头的程序"
+                                 Description="系统记录里当前处于「使用中」的程序，可直接加入名单。"
+                                 IsExpanded="True">
+                <StackPanel Spacing="6" Margin="0,8,0,4">
+                    <ItemsControl ItemsSource="{Binding DetectedApps}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid ColumnDefinitions="*,Auto" Margin="0,3">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding DisplayName}" />
+                                        <TextBlock Text="{Binding Key}" FontSize="11" Opacity="0.6"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Content="加入名单" VerticalAlignment="Center"
+                                            Click="OnAddDetectedClick" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="（当前没有程序在使用摄像头）" FontSize="12" Opacity="0.6" />
+                </StackPanel>
+            </fa:SettingsExpander>
+
+            <!-- ============ 提醒 ============ -->
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xEA8F;}"
+                                 Header="弹出提醒"
+                                 Description="摄像头被调用时弹出一条警告，带操作按钮。">
+                <fa:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.Alert.Enabled, Mode=TwoWay}" />
+                </fa:SettingsExpander.Footer>
+            </fa:SettingsExpander>
+
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE7F4;}"
+                                 Header="提醒方式"
+                                 Description="Windows 通知失败时（系统关闭通知等）自动改用插件内弹窗。">
+                <fa:SettingsExpander.Footer>
+                    <ComboBox Width="220" SelectedIndex="{Binding PresentationIndex, Mode=TwoWay}">
+                        <ComboBoxItem Content="自动（推荐）" />
+                        <ComboBoxItem Content="仅 Windows 通知" />
+                        <ComboBoxItem Content="仅插件内弹窗" />
+                    </ComboBox>
+                </fa:SettingsExpander.Footer>
+            </fa:SettingsExpander>
+
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE916;}"
+                                 Header="提醒冷却时间"
+                                 Description="同一个使用过程里，最多每隔这么久提醒一次。">
+                <fa:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Slider Width="150" Minimum="0" Maximum="600" TickFrequency="10"
+                                Value="{Binding Settings.Alert.CooldownSeconds, Mode=TwoWay}" />
+                        <TextBlock Width="66" VerticalAlignment="Center"
+                                   Text="{Binding Settings.Alert.CooldownSeconds, StringFormat='{}{0} 秒'}" />
+                    </StackPanel>
+                </fa:SettingsExpander.Footer>
+            </fa:SettingsExpander>
+
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE8BD;}"
+                                 Header="标题文字"
+                                 Description="提醒的标题。">
+                <fa:SettingsExpander.Footer>
+                    <TextBox Width="260" Text="{Binding Settings.Alert.Title, Mode=TwoWay}" />
+                </fa:SettingsExpander.Footer>
+            </fa:SettingsExpander>
+
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE8B7;}"
+                                 Header="「消除提醒」按钮"
+                                 Description="点掉本次提醒后，这次使用期间不再打扰。">
+                <fa:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.Alert.ShowDismissAction, Mode=TwoWay}" />
+                </fa:SettingsExpander.Footer>
+            </fa:SettingsExpander>
+
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE722;}"
+                                 Header="「关闭摄像头」按钮"
+                                 Description="禁用正在被使用的摄像头设备；没管理员权限时改为撤销该程序的摄像头权限。">
+                <fa:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.Alert.ShowDisableCameraAction, Mode=TwoWay}" />
+                </fa:SettingsExpander.Footer>
+            </fa:SettingsExpander>
+
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE8BB;}"
+                                 Header="「关闭应用」按钮"
+                                 Description="直接结束正在使用摄像头的程序。">
+                <fa:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.Alert.ShowCloseAppAction, Mode=TwoWay}" />
+                </fa:SettingsExpander.Footer>
+            </fa:SettingsExpander>
+
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE73E;}"
+                                 Header="操作结果回执"
+                                 Description="点完按钮后用一条通知告诉你结果。">
+                <fa:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.Alert.ShowActionResult, Mode=TwoWay}" />
+                </fa:SettingsExpander.Footer>
+            </fa:SettingsExpander>
+
+            <!-- ============ 诊断 ============ -->
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE9D2;}"
+                                 Header="通知注册状态"
+                                 Description="未打包程序发 Windows 通知需要在开始菜单留一个带 AUMID 的快捷方式。"
+                                 IsExpanded="True">
+                <StackPanel Spacing="8" Margin="0,8,0,4">
+                    <TextBlock Text="{Binding ToastStatus}" TextWrapping="Wrap" FontSize="12" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="发送测试提醒" Command="{Binding TestToastCommand}" />
+                        <Button Content="重新注册通知" Command="{Binding ReRegisterToastCommand}" />
+                        <Button Content="注销通知身份" Command="{Binding UnregisterToastCommand}" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding LastActionText}" FontSize="12" Opacity="0.7" TextWrapping="Wrap" />
+                </StackPanel>
+            </fa:SettingsExpander>
+
+        </StackPanel>
+    </ScrollViewer>
+
+</ci:SettingsPageBase>

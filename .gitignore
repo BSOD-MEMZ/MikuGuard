@@ -1,0 +1,6 @@
+bin/
+obj/
+cipx/
+_probe/
+*.user
+.vs/

@@ -1,0 +1,225 @@
+using System.Collections.ObjectModel;
+using Avalonia.Threading;
+using ClassIsland.Shared;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using MikuGuard.Models;
+using MikuGuard.Services;
+using MikuGuard.Services.Toast;
+
+namespace MikuGuard.ViewModels;
+
+/// <summary>摄像头守护设置页的视图模型。</summary>
+public partial class CameraGuardSettingsViewModel : ObservableObject
+{
+    private readonly CameraGuardService? _service;
+    private readonly DispatcherTimer? _timer;
+
+    public PluginSettings Settings { get; }
+
+    public CameraGuardService? Service => _service;
+
+    public ObservableCollection<CameraDeviceInfo> Devices { get; } = new();
+
+    public ObservableCollection<AppIdentity> DetectedApps { get; } = new();
+
+    [ObservableProperty]
+    private CameraDeviceInfo? _selectedDevice;
+
+    [ObservableProperty]
+    private string _newEntryText = "";
+
+    [ObservableProperty]
+    private string _statusText = "—";
+
+    [ObservableProperty]
+    private string _toastStatus = "—";
+
+    [ObservableProperty]
+    private string _lastActionText = "";
+
+    public CameraGuardSettingsViewModel(PluginSettings settings)
+    {
+        Settings = settings;
+        _service = IAppHost.TryGetService<CameraGuardService>();
+
+        ReloadDevices();
+        RefreshDetected();
+
+        _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
+        _timer.Tick += (_, _) => RefreshDetected();
+        _timer.Start();
+    }
+
+    // ================= 摄像头列表 =================
+
+    /// <summary>匹配模式下拉框索引。</summary>
+    public int ModeIndex
+    {
+        get => (int)Settings.Filter.Mode;
+        set
+        {
+            if (!Enum.IsDefined(typeof(AppFilterMode), value)) return;
+            Settings.Filter.Mode = (AppFilterMode)value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>提醒方式下拉框索引。</summary>
+    public int PresentationIndex
+    {
+        get => (int)Settings.Alert.Presentation;
+        set
+        {
+            if (!Enum.IsDefined(typeof(AlertPresentation), value)) return;
+            Settings.Alert.Presentation = (AlertPresentation)value;
+            OnPropertyChanged();
+        }
+    }
+
+    private static readonly CameraDeviceInfo AnyCamera = new() { Id = "", Name = "任意摄像头（默认）" };
+
+    public void ReloadDevices()
+    {
+        Devices.Clear();
+        Devices.Add(AnyCamera);
+
+        var found = _service?.Devices ?? CameraDeviceService.Enumerate();
+        foreach (var device in found) Devices.Add(device);
+
+        var current = Devices.FirstOrDefault(d =>
+            string.Equals(d.Id, Settings.Monitor.DeviceId, StringComparison.OrdinalIgnoreCase));
+        SelectedDevice = current ?? AnyCamera;
+    }
+
+    partial void OnSelectedDeviceChanged(CameraDeviceInfo? value)
+    {
+        if (value == null) return;
+        Settings.Monitor.DeviceId = value.Id;
+        Settings.Monitor.DeviceName = value.Name;
+    }
+
+    // ================= 状态刷新 =================
+
+    private void RefreshDetected()
+    {
+        if (_service == null)
+        {
+            StatusText = "服务未启动";
+            return;
+        }
+
+        StatusText = _service.StatusText;
+        LastActionText = _service.LastActionResult;
+
+        var current = _service.DetectedApps;
+        var sameSet = current.Count == DetectedApps.Count &&
+                      current.Select(x => x.Key).SequenceEqual(DetectedApps.Select(x => x.Key), StringComparer.OrdinalIgnoreCase);
+        if (!sameSet)
+        {
+            DetectedApps.Clear();
+            foreach (var app in current) DetectedApps.Add(app);
+        }
+
+        var alert = _service.AlertService;
+        ToastStatus = alert.ToastAvailable
+            ? $"Windows 通知可用（{alert.RegistrationStatus}）"
+            : $"Windows 通知不可用：{alert.ToastError}；将使用插件内弹窗（{alert.RegistrationStatus}）";
+    }
+
+    // ================= 名单 =================
+
+    [RelayCommand]
+    private void AddEntry()
+    {
+        var text = (NewEntryText ?? "").Trim();
+        if (text.Length == 0) return;
+        AddEntryInternal(text, text);
+        NewEntryText = "";
+    }
+
+    public void AddEntryInternal(string displayName, string match)
+    {
+        if (Settings.Filter.Entries.Any(e => string.Equals(e.Match, match, StringComparison.OrdinalIgnoreCase)))
+            return;
+
+        Settings.Filter.Entries.Add(new AppFilterEntry { DisplayName = displayName, Match = match });
+        GuardLog.Info($"[settings] 名单新增：{match}");
+    }
+
+    [RelayCommand]
+    private void RemoveEntry(AppFilterEntry? entry)
+    {
+        if (entry == null) return;
+        Settings.Filter.Entries.Remove(entry);
+    }
+
+    [RelayCommand]
+    private void AddDetectedApp(AppIdentity? app)
+    {
+        if (app == null) return;
+        AddEntryInternal(app.DisplayName, app.Key);
+    }
+
+    // ================= 诊断 =================
+
+    [RelayCommand]
+    private void RefreshDevices()
+    {
+        _service?.RefreshDevices();
+        ReloadDevices();
+        RefreshDetected();
+    }
+
+    [RelayCommand]
+    private void TestToast()
+    {
+        if (_service == null) return;
+        var alert = new GuardAlert("C:\\Windows\\System32\\notepad.exe", "记事本（测试）", false,
+            SelectedDevice?.Name ?? "摄像头", SelectedDevice?.InstanceId ?? "", SelectedDevice?.Id ?? "");
+        _service.AlertService.Show(alert);
+    }
+
+    [RelayCommand]
+    private void ReRegisterToast()
+    {
+        ToastPlatform.EnsureRegistered(IconPath());
+        _service?.AlertService.Initialize(IconPath());
+        RefreshDetected();
+    }
+
+    [RelayCommand]
+    private void UnregisterToast()
+    {
+        ToastPlatform.Unregister();
+        RefreshDetected();
+    }
+
+    [RelayCommand]
+    private void RestoreCamera()
+    {
+        var device = SelectedDevice;
+        if (device == null || string.IsNullOrEmpty(device.InstanceId))
+        {
+            LastActionText = "没有选中具体摄像头，无法恢复设备";
+            return;
+        }
+
+        var (ok, message) = CameraDeviceService.SetEnabled(device.InstanceId, true);
+        LastActionText = ok ? $"「{device.Name}」{message}" : $"{message}（需要管理员权限）";
+        RefreshDevices();
+    }
+
+    [RelayCommand]
+    private void RestartMonitor()
+    {
+        _service?.Restart();
+        RefreshDetected();
+    }
+
+    private static string? IconPath()
+    {
+        var candidate = Path.Combine(AppContext.BaseDirectory, "icon.png");
+        return File.Exists(candidate) ? candidate : null;
+    }
+}
