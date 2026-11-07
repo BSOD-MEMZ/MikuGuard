@@ -23,7 +23,7 @@
                         Message="{Binding StatusText}" />
 
             <!-- ============ 监控 ============ -->
-            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE7B3;}"
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xEF4F;}"
                                  Header="启用摄像头守护"
                                  Description="检测到摄像头被调用时，让指示点亮起并弹出提醒。">
                 <fa:SettingsExpander.Footer>
@@ -31,7 +31,7 @@
                 </fa:SettingsExpander.Footer>
             </fa:SettingsExpander>
 
-            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE916;}"
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xF361;}"
                                  Header="检测间隔"
                                  Description="轮询摄像头状态的频率。越小越灵敏，越费电。">
                 <fa:SettingsExpander.Footer>
@@ -59,11 +59,14 @@
                             </ComboBox.ItemTemplate>
                         </ComboBox>
                         <Button Content="刷新" Command="{Binding RefreshDevicesCommand}" />
+                        <Button Content="预览" Command="{Binding PreviewCameraCommand}"
+                                IsEnabled="{Binding HasConcreteDevice}"
+                                ToolTip.Tip="打开预览窗口看这台摄像头的画面" />
                     </StackPanel>
                 </fa:SettingsExpander.Footer>
             </fa:SettingsExpander>
 
-            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE7BA;}"
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xF18E;}"
                                  Header="严格匹配所选摄像头"
                                  Description="开启：只有选中的那台被占用才提醒。关闭：任意摄像头被调用都提醒。">
                 <fa:SettingsExpander.Footer>
@@ -71,7 +74,7 @@
                 </fa:SettingsExpander.Footer>
             </fa:SettingsExpander>
 
-            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE72E;}"
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE195;}"
                                  Header="恢复被禁用的摄像头"
                                  Description="「关闭摄像头」按钮会禁用设备，这里可以重新启用（需要管理员权限）。">
                 <fa:SettingsExpander.Footer>
@@ -80,7 +83,7 @@
             </fa:SettingsExpander>
 
             <!-- ============ 程序过滤 ============ -->
-            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE71C;}"
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE833;}"
                                  Header="程序过滤"
                                  Description="决定哪些程序使用摄像头时需要提醒。"
                                  IsExpanded="True">
@@ -123,7 +126,7 @@
                 </StackPanel>
             </fa:SettingsExpander>
 
-            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE9D9;}"
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE075;}"
                                  Header="正在使用摄像头的程序"
                                  Description="系统记录里当前处于「使用中」的程序，可直接加入名单。"
                                  IsExpanded="True">
@@ -148,7 +151,7 @@
             </fa:SettingsExpander>
 
             <!-- ============ 提醒 ============ -->
-            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xEA8F;}"
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE025;}"
                                  Header="弹出提醒"
                                  Description="摄像头被调用时弹出一条警告，带操作按钮。">
                 <fa:SettingsExpander.Footer>
@@ -156,7 +159,7 @@
                 </fa:SettingsExpander.Footer>
             </fa:SettingsExpander>
 
-            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE7F4;}"
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE62F;}"
                                  Header="提醒方式"
                                  Description="Windows 通知失败时（系统关闭通知等）自动改用插件内弹窗。">
                 <fa:SettingsExpander.Footer>
@@ -168,7 +171,7 @@
                 </fa:SettingsExpander.Footer>
             </fa:SettingsExpander>
 
-            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE916;}"
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE9A8;}"
                                  Header="提醒冷却时间"
                                  Description="同一个使用过程里，最多每隔这么久提醒一次。">
                 <fa:SettingsExpander.Footer>
@@ -181,7 +184,7 @@
                 </fa:SettingsExpander.Footer>
             </fa:SettingsExpander>
 
-            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE8BD;}"
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE7C9;}"
                                  Header="标题文字"
                                  Description="提醒的标题。">
                 <fa:SettingsExpander.Footer>
@@ -189,7 +192,7 @@
                 </fa:SettingsExpander.Footer>
             </fa:SettingsExpander>
 
-            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE8B7;}"
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE671;}"
                                  Header="「消除提醒」按钮"
                                  Description="点掉本次提醒后，这次使用期间不再打扰。">
                 <fa:SettingsExpander.Footer>
@@ -197,7 +200,7 @@
                 </fa:SettingsExpander.Footer>
             </fa:SettingsExpander>
 
-            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE722;}"
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE39C;}"
                                  Header="「关闭摄像头」按钮"
                                  Description="禁用正在被使用的摄像头设备；没管理员权限时改为撤销该程序的摄像头权限。">
                 <fa:SettingsExpander.Footer>
@@ -205,7 +208,7 @@
                 </fa:SettingsExpander.Footer>
             </fa:SettingsExpander>
 
-            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE8BB;}"
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xF483;}"
                                  Header="「关闭应用」按钮"
                                  Description="直接结束正在使用摄像头的程序。">
                 <fa:SettingsExpander.Footer>
@@ -213,7 +216,7 @@
                 </fa:SettingsExpander.Footer>
             </fa:SettingsExpander>
 
-            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE73E;}"
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE426;}"
                                  Header="操作结果回执"
                                  Description="点完按钮后用一条通知告诉你结果。">
                 <fa:SettingsExpander.Footer>
@@ -222,7 +225,7 @@
             </fa:SettingsExpander>
 
             <!-- ============ 诊断 ============ -->
-            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE9D2;}"
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE9E4;}"
                                  Header="通知注册状态"
                                  Description="未打包程序发 Windows 通知需要在开始菜单留一个带 AUMID 的快捷方式。"
                                  IsExpanded="True">

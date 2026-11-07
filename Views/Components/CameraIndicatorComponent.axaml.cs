@@ -143,14 +143,12 @@ public partial class CameraIndicatorComponent : ComponentBase<CameraIndicatorSet
 
         var dotSize = Math.Clamp(Settings.DotSize, 4, 48);
         var expanded = Math.Clamp(Settings.ExpandedSize, dotSize, 72);
-        var dotBrush = ParseBrush(Settings.DotColor, Color.Parse("#FF43A047"));
-
-        Dot.Fill = dotBrush;
-        Icon.Foreground = ParseBrush(Settings.IconColor, Colors.White);
+        Dot.Fill = new SolidColorBrush(Settings.DotColor);
+        Icon.Foreground = new SolidColorBrush(Settings.IconColor);
         Icon.Glyph = string.IsNullOrEmpty(Settings.IconGlyph) ? "" : Settings.IconGlyph;
         Icon.IsVisible = !string.IsNullOrEmpty(Settings.IconGlyph) && _applied && RootGrid.Width > dotSize + 0.5;
 
-        var ringBrush = ParseBrush(Settings.RingColor, Colors.Transparent);
+        var ringBrush = new SolidColorBrush(Settings.RingColor);
         Ring.Stroke = ringBrush;
         Ring.IsVisible = ringBrush is ISolidColorBrush { Color.A: > 0 };
 
@@ -171,13 +169,6 @@ public partial class CameraIndicatorComponent : ComponentBase<CameraIndicatorSet
 
         UpdateTooltip();
         _applied = true;
-    }
-
-    private static IBrush ParseBrush(string? text, Color fallback)
-    {
-        if (!string.IsNullOrWhiteSpace(text) && Color.TryParse(text.Trim(), out var color))
-            return new SolidColorBrush(color);
-        return new SolidColorBrush(fallback);
     }
 
     // ================= 状态 =================

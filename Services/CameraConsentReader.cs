@@ -26,6 +26,11 @@ public sealed class AppIdentity
 /// <summary>
 /// 读取 Windows「摄像头访问记录」注册表（ConsentStore），得到当前正在使用摄像头的程序。
 /// 纯读取，不碰硬件。
+///
+/// 注意键的布局（Windows 10/11 实况）：
+///   webcam\NonPackaged\C:#Program Files#Foo#Foo.exe   ← 桌面程序（\ 写成 #）
+///   webcam\Microsoft.WindowsCamera_8wekyb3d8bbwe       ← UWP 程序直接挂在根下（没有 Packages 层级！）
+/// 早期版本还有 webcam\Packages\{包族名} 的写法，这里一并兼容。
 /// </summary>
 public static class CameraConsentReader
 {
@@ -42,8 +47,26 @@ public static class CameraConsentReader
             using var root = Registry.CurrentUser.OpenSubKey(WebcamRoot);
             if (root == null) return list;
 
-            ReadSubKey(root, "NonPackaged", false, list);
-            ReadSubKey(root, "Packages", true, list);
+            foreach (var subName in root.GetSubKeyNames())
+            {
+                if (subName.Equals("NonPackaged", StringComparison.OrdinalIgnoreCase))
+                {
+                    ReadDesktopApps(root, subName, list);
+                }
+                else if (subName.Equals("Packages", StringComparison.OrdinalIgnoreCase))
+                {
+                    // 部分系统版本会把 UWP 放在 Packages 下
+                    using var packages = root.OpenSubKey(subName);
+                    if (packages == null) continue;
+                    foreach (var appName in packages.GetSubKeyNames())
+                        ReadAppKey(packages, appName, true, list);
+                }
+                else
+                {
+                    // 直接挂在 webcam 下的 UWP 包（Windows 相机就属于这种）
+                    ReadAppKey(root, subName, true, list);
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -56,13 +79,12 @@ public static class CameraConsentReader
             .ToList();
     }
 
-    /// <summary>判断某个程序当前是否被系统允许访问摄像头（用于撤销权限后回读）。</summary>
+    /// <summary>判断某个程序当前是否被系统允许访问摄像头。</summary>
     public static bool? ReadConsentValue(AppIdentity app)
     {
         try
         {
-            var sub = WebcamRoot + (app.IsPackaged ? @"\Packages\" : @"\NonPackaged\") + EscapeKey(app);
-            using var key = Registry.CurrentUser.OpenSubKey(sub);
+            using var key = Registry.CurrentUser.OpenSubKey(ConsentKeyPath(app));
             var v = key?.GetValue("Value") as string;
             if (v == null) return null;
             return !v.Equals("Deny", StringComparison.OrdinalIgnoreCase);
@@ -78,8 +100,7 @@ public static class CameraConsentReader
     {
         try
         {
-            var sub = WebcamRoot + (app.IsPackaged ? @"\Packages\" : @"\NonPackaged\") + EscapeKey(app);
-            using var key = Registry.CurrentUser.CreateSubKey(sub);
+            using var key = Registry.CurrentUser.CreateSubKey(ConsentKeyPath(app));
             if (key == null) return false;
             key.SetValue("Value", allow ? "Allow" : "Deny", RegistryValueKind.String);
             return true;
@@ -91,41 +112,44 @@ public static class CameraConsentReader
         }
     }
 
-    private static string EscapeKey(AppIdentity app)
-    {
-        if (app.IsPackaged) return app.Key;
-        // 注册表键名里 \ 被替换成 #
-        return app.Key.Replace('\\', '#').Replace('/', '#');
-    }
+    private static string ConsentKeyPath(AppIdentity app) =>
+        app.IsPackaged
+            ? WebcamRoot + "\\" + app.Key
+            : WebcamRoot + @"\NonPackaged\" + app.Key.Replace('\\', '#').Replace('/', '#');
 
-    private static void ReadSubKey(RegistryKey parent, string name, bool packaged, List<AppIdentity> output)
+    private static void ReadDesktopApps(RegistryKey parent, string subName, List<AppIdentity> output)
     {
-        using var sub = parent.OpenSubKey(name);
+        using var sub = parent.OpenSubKey(subName);
         if (sub == null) return;
 
         foreach (var appName in sub.GetSubKeyNames())
         {
-            using var appKey = sub.OpenSubKey(appName);
-            if (appKey == null) continue;
-
-            var start = ReadInt64(appKey, "LastUsedTimeStart");
-            var stop = ReadInt64(appKey, "LastUsedTimeStop");
-            if (start <= 0) continue;         // 从未用过
-            if (stop != 0) continue;          // 已经结束
-
-            var key = packaged ? appName : appName.Replace('#', '\\');
-            var started = FromFileTimeUtc(start);
-
-            if (!packaged && !IsDesktopProcessAlive(key)) continue;   // 进程已退出，记录是脏的
-
-            output.Add(new AppIdentity
-            {
-                Key = key,
-                DisplayName = packaged ? PackageDisplayName(key) : Path.GetFileName(key),
-                IsPackaged = packaged,
-                StartedAt = started
-            });
+            // 桌面程序的键名用 # 代替 \，还原成真实路径
+            ReadAppKey(sub, appName.Replace('#', '\\'), false, output, subKeyName: appName);
         }
+    }
+
+    /// <summary>读一个应用键；subKeyName 为空时用 appKeyName 本身作为注册表子键名。</summary>
+    private static void ReadAppKey(RegistryKey parent, string appKeyName, bool packaged,
+        List<AppIdentity> output, string? subKeyName = null)
+    {
+        using var appKey = parent.OpenSubKey(subKeyName ?? appKeyName);
+        if (appKey == null) return;
+
+        var start = ReadInt64(appKey, "LastUsedTimeStart");
+        var stop = ReadInt64(appKey, "LastUsedTimeStop");
+        if (start <= 0) return;      // 从未用过
+        if (stop != 0) return;       // 已经结束
+
+        if (!packaged && !IsDesktopProcessAlive(appKeyName)) return;   // 进程已退出，记录是脏的
+
+        output.Add(new AppIdentity
+        {
+            Key = appKeyName,
+            DisplayName = packaged ? PackageDisplayName(appKeyName) : Path.GetFileName(appKeyName),
+            IsPackaged = packaged,
+            StartedAt = FromFileTimeUtc(start)
+        });
     }
 
     private static bool IsDesktopProcessAlive(string exePath)

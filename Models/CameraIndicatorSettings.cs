@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using Avalonia.Media;
+using ClassIsland.Core.Converters;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace MikuGuard.Models;
@@ -7,13 +10,15 @@ namespace MikuGuard.Models;
 /// </summary>
 public partial class CameraIndicatorSettings : ObservableObject
 {
-    /// <summary>圆点颜色（#AARRGGBB 或 #RRGGBB）。</summary>
+    /// <summary>圆点颜色。</summary>
     [ObservableProperty]
-    private string _dotColor = "#FF43A047";
+    [property: JsonConverter(typeof(ColorHexJsonConverter))]
+    private Color _dotColor = Color.Parse("#FF43A047");
 
-    /// <summary>圆环颜色（圆点外描边，留空 = 不描边）。</summary>
+    /// <summary>外圈描边颜色（A=0 表示不描边）。</summary>
     [ObservableProperty]
-    private string _ringColor = "#00FFFFFF";
+    [property: JsonConverter(typeof(ColorHexJsonConverter))]
+    private Color _ringColor = Color.FromArgb(0, 255, 255, 255);
 
     /// <summary>图标字符（Fluent 图标字形的 Unicode 字符），留空 = 不显示图标。</summary>
     [ObservableProperty]
@@ -21,7 +26,8 @@ public partial class CameraIndicatorSettings : ObservableObject
 
     /// <summary>图标颜色。</summary>
     [ObservableProperty]
-    private string _iconColor = "#FFFFFFFF";
+    [property: JsonConverter(typeof(ColorHexJsonConverter))]
+    private Color _iconColor = Colors.White;
 
     /// <summary>收缩后的圆点尺寸（px）。</summary>
     [ObservableProperty]

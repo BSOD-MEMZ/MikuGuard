@@ -25,7 +25,7 @@ public partial class CameraIndicatorSettingsControl : ComponentBase<CameraIndica
 
         Settings.PropertyChanged -= OnSettingsChanged;
         Settings.PropertyChanged += OnSettingsChanged;
-        RefreshBrushes();
+        RaiseVisualProps();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
@@ -34,35 +34,22 @@ public partial class CameraIndicatorSettingsControl : ComponentBase<CameraIndica
         if (Settings != null) Settings.PropertyChanged -= OnSettingsChanged;
     }
 
-    private void OnSettingsChanged(object? sender, PropertyChangedEventArgs e) => RefreshBrushes();
+    private void OnSettingsChanged(object? sender, PropertyChangedEventArgs e) => RaiseVisualProps();
 
-    private void RefreshBrushes()
+    private void RaiseVisualProps()
     {
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DotBrush)));
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(RingBrush)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IconBrush)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(GlyphPreview)));
     }
 
-    public IBrush DotBrush => ToBrush(Settings?.DotColor, Color.Parse("#FF43A047"));
-
-    public IBrush RingBrush => ToBrush(Settings?.RingColor, Colors.Transparent);
-
-    public IBrush IconBrush => ToBrush(Settings?.IconColor, Colors.White);
+    public IBrush IconBrush => new SolidColorBrush(Settings?.IconColor ?? Colors.White);
 
     public string GlyphPreview => Settings?.IconGlyph ?? "";
-
-    private static IBrush ToBrush(string? text, Color fallback)
-    {
-        if (!string.IsNullOrWhiteSpace(text) && Color.TryParse(text.Trim(), out var color))
-            return new SolidColorBrush(color);
-        return new SolidColorBrush(fallback);
-    }
 
     private void OnPresetDotColor(object? sender, RoutedEventArgs e)
     {
         if (Settings == null || sender is not Button { Tag: string hex }) return;
-        Settings.DotColor = hex;
+        if (Color.TryParse(hex, out var color)) Settings.DotColor = color;
     }
 
     private void OnPresetGlyph(object? sender, RoutedEventArgs e)

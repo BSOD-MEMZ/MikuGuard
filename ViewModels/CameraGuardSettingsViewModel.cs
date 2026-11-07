@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MikuGuard.Models;
 using MikuGuard.Services;
+using MikuGuard.Services.Alert;
 using MikuGuard.Services.Toast;
 
 namespace MikuGuard.ViewModels;
@@ -14,6 +15,7 @@ public partial class CameraGuardSettingsViewModel : ObservableObject
 {
     private readonly CameraGuardService? _service;
     private readonly DispatcherTimer? _timer;
+    private CameraPreviewWindow? _previewWindow;
 
     public PluginSettings Settings { get; }
 
@@ -97,6 +99,30 @@ public partial class CameraGuardSettingsViewModel : ObservableObject
         if (value == null) return;
         Settings.Monitor.DeviceId = value.Id;
         Settings.Monitor.DeviceName = value.Name;
+        OnPropertyChanged(nameof(HasConcreteDevice));
+    }
+
+    /// <summary>是否选中了具体某一台摄像头（"任意摄像头"不能预览）。</summary>
+    public bool HasConcreteDevice => SelectedDevice != null && !string.IsNullOrEmpty(SelectedDevice.Id);
+
+    /// <summary>打开预览窗口看这台摄像头的画面。</summary>
+    [RelayCommand]
+    private void PreviewCamera()
+    {
+        var device = SelectedDevice;
+        if (device == null || string.IsNullOrEmpty(device.Id)) return;
+
+        if (_previewWindow == null)
+        {
+            var window = new CameraPreviewWindow(device.Id, device.Name);
+            window.Closed += (_, _) => _previewWindow = null;
+            _previewWindow = window;
+        }
+
+        if (!_previewWindow.IsVisible) _previewWindow.Show();
+        else _previewWindow.Activate();
+
+        _ = _previewWindow.StartAsync();
     }
 
     // ================= 状态刷新 =================
