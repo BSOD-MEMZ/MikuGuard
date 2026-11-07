@@ -52,8 +52,9 @@ public sealed class CameraAlertService
         var title = string.IsNullOrWhiteSpace(_settings.Alert.Title) ? "摄像头正在被使用" : _settings.Alert.Title;
         var body = BuildBody(alert);
 
+        var image = ResolveImagePath();
         var preferToast = _settings.Alert.Presentation != AlertPresentation.InApp;
-        if (preferToast && _toast.TryShow(title, body, actions))
+        if (preferToast && _toast.TryShow(title, body, actions, image))
         {
             HideWindow();
             return;
@@ -71,7 +72,7 @@ public sealed class CameraAlertService
             try
             {
                 _window ??= CreateWindow();
-                _window.Present(title, body, actions);
+                _window.Present(title, body, actions, image);
             }
             catch (Exception ex)
             {
@@ -102,7 +103,7 @@ public sealed class CameraAlertService
             try
             {
                 _window ??= CreateWindow();
-                _window.Present(title, body, Array.Empty<ToastActionButton>());
+                _window.Present(title, body, Array.Empty<ToastActionButton>(), null);
                 var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
                 timer.Tick += (_, _) =>
                 {
@@ -116,6 +117,25 @@ public sealed class CameraAlertService
                 GuardLog.Error("[alert] 回执弹窗失败", ex);
             }
         });
+    }
+
+    /// <summary>解析配图路径：相对路径按插件目录算，文件不存在就当没有。</summary>
+    private string? ResolveImagePath()
+    {
+        var configured = _settings.Alert.ImagePath;
+        if (string.IsNullOrWhiteSpace(configured)) return null;
+
+        try
+        {
+            var full = Path.IsPathRooted(configured)
+                ? configured
+                : Path.Combine(AppContext.BaseDirectory, configured.Replace('/', Path.DirectorySeparatorChar));
+            return File.Exists(full) ? full : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private GuardAlertWindow CreateWindow()

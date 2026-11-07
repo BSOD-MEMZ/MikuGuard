@@ -45,7 +45,15 @@ public partial class CameraIndicatorSettings : ObservableObject
     [ObservableProperty]
     private bool _pulse = true;
 
-    /// <summary>鼠标悬停时用提示气泡显示是哪个程序在用摄像头。</summary>
+    /// <summary>指示点亮起时，在岛上从指示点扩散一次涟漪。</summary>
     [ObservableProperty]
-    private bool _showAppTooltip = true;
+    private bool _rippleEnabled = true;
+
+    /// <summary>涟漪时长（毫秒）。</summary>
+    [ObservableProperty]
+    private int _rippleDurationMs = 620;
+
+    /// <summary>涟漪最浓时的填充强度（0.02~0.9）。</summary>
+    [ObservableProperty]
+    private double _rippleStrength = 0.24;
 }

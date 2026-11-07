@@ -22,14 +22,6 @@
                 <fa:SettingsExpander.Footer>
                     <ColorPicker Color="{Binding Settings.DotColor, Mode=TwoWay}" VerticalAlignment="Center" />
                 </fa:SettingsExpander.Footer>
-                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
-                    <Button Content="绿" Tag="#FF43A047" Click="OnPresetDotColor" />
-                    <Button Content="青" Tag="#FF00BCD4" Click="OnPresetDotColor" />
-                    <Button Content="蓝" Tag="#FF2979FF" Click="OnPresetDotColor" />
-                    <Button Content="紫" Tag="#FF7C4DFF" Click="OnPresetDotColor" />
-                    <Button Content="橙" Tag="#FFFF9800" Click="OnPresetDotColor" />
-                    <Button Content="红" Tag="#FFE53935" Click="OnPresetDotColor" />
-                </StackPanel>
             </fa:SettingsExpander>
 
             <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE454;}"
@@ -42,7 +34,7 @@
 
             <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE9B2;}"
                                  Header="图标与颜色"
-                                 Description="展开时显示在圆点里的图标（Fluent 字形），留空则不显示图标。">
+                                 Description="展开时显示在圆点里的 Fluent 图标字形，留空则不显示。">
                 <fa:SettingsExpander.Footer>
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <ci:FluentIcon Glyph="{Binding GlyphPreview}" FontSize="16"
@@ -52,14 +44,6 @@
                         <ColorPicker Color="{Binding Settings.IconColor, Mode=TwoWay}" VerticalAlignment="Center" />
                     </StackPanel>
                 </fa:SettingsExpander.Footer>
-                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
-                    <Button Content="&#xE392; 摄像头" Tag="&#xE392;" Click="OnPresetGlyph" />
-                    <Button Content="&#xE398; 半球" Tag="&#xE398;" Click="OnPresetGlyph" />
-                    <Button Content="&#xE3A0; 切换" Tag="&#xE3A0;" Click="OnPresetGlyph" />
-                    <Button Content="&#xE813; 眼睛" Tag="&#xE813;" Click="OnPresetGlyph" />
-                    <Button Content="&#xEF4F; 盾牌" Tag="&#xEF4F;" Click="OnPresetGlyph" />
-                    <Button Content="不放图标" Tag="" Click="OnPresetGlyph" />
-                </StackPanel>
             </fa:SettingsExpander>
 
             <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xEFD5;}"
@@ -109,13 +93,40 @@
                 </fa:SettingsExpander.Footer>
             </fa:SettingsExpander>
 
-            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE9E4;}"
-                                 Header="悬停提示"
-                                 Description="鼠标移到指示点上时显示是哪个程序在用摄像头。">
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xEF4F;}"
+                                 Header="点亮时播放涟漪"
+                                 Description="指示点亮起时，主题色涟漪从指示点扩散到整个岛。">
                 <fa:SettingsExpander.Footer>
-                    <ToggleSwitch IsChecked="{Binding Settings.ShowAppTooltip, Mode=TwoWay}" />
+                    <ToggleSwitch IsChecked="{Binding Settings.RippleEnabled, Mode=TwoWay}" />
                 </fa:SettingsExpander.Footer>
             </fa:SettingsExpander>
+
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xF361;}"
+                                 Header="涟漪时长"
+                                 Description="扩散动画持续时间（MD3 fast-out-slow-in 曲线）。">
+                <fa:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Slider Width="140" Minimum="200" Maximum="2000" TickFrequency="20"
+                                Value="{Binding Settings.RippleDurationMs, Mode=TwoWay}" />
+                        <TextBlock Width="70" VerticalAlignment="Center"
+                                   Text="{Binding Settings.RippleDurationMs, StringFormat='{}{0} ms'}" />
+                    </StackPanel>
+                </fa:SettingsExpander.Footer>
+            </fa:SettingsExpander>
+
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE51E;}"
+                                 Header="涟漪强度"
+                                 Description="涟漪最浓时的填充不透明度。">
+                <fa:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Slider Width="140" Minimum="0.05" Maximum="0.6" TickFrequency="0.01"
+                                Value="{Binding Settings.RippleStrength, Mode=TwoWay}" />
+                        <TextBlock Width="56" VerticalAlignment="Center"
+                                   Text="{Binding Settings.RippleStrength, StringFormat='{}{0:0.00}'}" />
+                    </StackPanel>
+                </fa:SettingsExpander.Footer>
+            </fa:SettingsExpander>
+
 
         </StackPanel>
     </ScrollViewer>

@@ -31,7 +31,8 @@ var target = devices[0];
 var ok = await service.StartAsync(target.Id, target.Name);
 Console.WriteLine($"  StartAsync = {ok}, LastError = {service.LastError ?? "（无）"}");
 
-await Task.Delay(3000);
+await Task.Delay(1500);
+await Task.Delay(1500);
 Console.WriteLine($"  3 秒内收到 {frames} 帧，最后一帧 {lastSize}");
 
 await service.StopAsync();

@@ -44,6 +44,8 @@
     <None Update="manifest.yml" CopyToOutputDirectory="PreserveNewest" />
     <None Update="README.md" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="icon.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\**\*.jpg" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\**\*.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

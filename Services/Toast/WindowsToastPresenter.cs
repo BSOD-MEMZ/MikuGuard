@@ -41,7 +41,8 @@ public sealed class WindowsToastPresenter
         }
     }
 
-    public bool TryShow(string title, string body, IReadOnlyList<ToastActionButton> buttons)
+    public bool TryShow(string title, string body, IReadOnlyList<ToastActionButton> buttons,
+        string? imagePath = null)
     {
         if (_notifier == null && !TryInitialize()) return false;
 
@@ -50,12 +51,15 @@ public sealed class WindowsToastPresenter
             var actions = string.Concat(buttons.Select(b =>
                 $"<action content=\"{SecurityElement.Escape(b.Content)}\" arguments=\"{SecurityElement.Escape(b.Arguments)}\" activationType=\"foreground\"/>"));
 
+            var image = BuildImageXml(imagePath);
+
             var xml = $"""
                        <toast launch="action=none" activationType="foreground">
                          <visual>
                            <binding template="ToastGeneric">
                              <text>{SecurityElement.Escape(title)}</text>
                              <text>{SecurityElement.Escape(body)}</text>
+                             {image}
                            </binding>
                          </visual>
                          {(actions.Length > 0 ? $"<actions>{actions}</actions>" : "")}
@@ -88,6 +92,22 @@ public sealed class WindowsToastPresenter
             LastError = $"0x{ex.HResult:X8} {ex.Message}";
             GuardLog.Warn($"[toast] 显示失败：{LastError}");
             return false;
+        }
+    }
+
+    /// <summary>Toast 里的配图（hero 大图）。路径不存在就不加。</summary>
+    private static string BuildImageXml(string? imagePath)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(imagePath) || !File.Exists(imagePath)) return "";
+            var uri = new Uri(Path.GetFullPath(imagePath)).AbsoluteUri;
+            return $"<image placement=\"hero\" src=\"{SecurityElement.Escape(uri)}\" hint-crop=\"none\"/>";
+        }
+        catch (Exception ex)
+        {
+            GuardLog.Warn($"[toast] 配图无法使用：{ex.Message}");
+            return "";
         }
     }
 

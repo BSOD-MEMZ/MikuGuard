@@ -36,6 +36,39 @@ public partial class CameraGuardSettingsPage : SettingsPageBase
             ViewModel.AddDetectedAppCommand.Execute(app);
     }
 
+    private async void OnBrowseImageClick(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var topLevel = TopLevel.GetTopLevel(this);
+            if (topLevel == null) return;
+
+            var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "选择提醒配图",
+                AllowMultiple = false,
+                FileTypeFilter = new[]
+                {
+                    new FilePickerFileType("图片") { Patterns = new[] { "*.jpg", "*.jpeg", "*.png", "*.webp" } }
+                }
+            });
+
+            var path = files.FirstOrDefault()?.TryGetLocalPath();
+            if (string.IsNullOrEmpty(path)) return;
+
+            ViewModel.Settings.Alert.ImagePath = path;
+        }
+        catch (Exception ex)
+        {
+            GuardLog.Error("[settings] 选择配图失败", ex);
+        }
+    }
+
+    private void OnResetImageClick(object? sender, RoutedEventArgs e)
+    {
+        ViewModel.Settings.Alert.ImagePath = @"Assets\monitoring.jpg";
+    }
+
     private async void OnBrowseExeClick(object? sender, RoutedEventArgs e)
     {
         try

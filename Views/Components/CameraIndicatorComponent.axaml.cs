@@ -131,8 +131,6 @@ public partial class CameraIndicatorComponent : ComponentBase<CameraIndicatorSet
 
         if (e.PropertyName == nameof(CameraGuardService.IsCameraInUse))
             Dispatcher.UIThread.Post(() => Refresh(_service.IsCameraInUse));
-        else if (e.PropertyName == nameof(CameraGuardService.ActiveAppName))
-            Dispatcher.UIThread.Post(UpdateTooltip);
     }
 
     // ================= 外观 =================
@@ -167,7 +165,6 @@ public partial class CameraIndicatorComponent : ComponentBase<CameraIndicatorSet
             Collapse(dotSize);
         }
 
-        UpdateTooltip();
         _applied = true;
     }
 
@@ -212,6 +209,7 @@ public partial class CameraIndicatorComponent : ComponentBase<CameraIndicatorSet
         Icon.IsVisible = !string.IsNullOrEmpty(Settings.IconGlyph);
 
         StartPulse();
+        PlayRipple();
 
         if (Settings.ExpandHoldMs > 0)
         {
@@ -223,6 +221,15 @@ public partial class CameraIndicatorComponent : ComponentBase<CameraIndicatorSet
             };
             _collapseTimer.Start();
         }
+    }
+
+    /// <summary>从指示点向整个岛扩散一次 MD3 涟漪。</summary>
+    private void PlayRipple()
+    {
+        if (Settings == null || !Settings.RippleEnabled) return;
+
+        var center = new Avalonia.Point(Bounds.Width / 2, Bounds.Height / 2);
+        IslandRippleHost.Play(this, center, Settings.RippleDurationMs, Settings.RippleStrength);
     }
 
     private void Collapse(double dotSize)
@@ -295,18 +302,4 @@ public partial class CameraIndicatorComponent : ComponentBase<CameraIndicatorSet
         Ring.Opacity = 1;
     }
 
-    private void UpdateTooltip()
-    {
-        if (Settings == null) return;
-
-        if (!Settings.ShowAppTooltip || _service == null || !_service.IsCameraInUse)
-        {
-            ToolTip.SetTip(this, null);
-            return;
-        }
-
-        var app = string.IsNullOrWhiteSpace(_service.ActiveAppName) ? "某个程序" : _service.ActiveAppName;
-        var device = string.IsNullOrWhiteSpace(_service.ActiveDeviceName) ? "摄像头" : $"「{_service.ActiveDeviceName}」";
-        ToolTip.SetTip(this, $"{app} 正在使用{device}");
-    }
 }

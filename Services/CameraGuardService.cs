@@ -182,15 +182,9 @@ public sealed class CameraGuardService : ObservableObject, IDisposable
         if (!consentActive)
             return new Detection(false, null, cfg.DeviceName, instanceId, cfg.DeviceId);
 
-        var occupied = CameraDeviceService.ProbeOccupied(cfg.DeviceId);
-
-        bool inUse;
-        if (occupied.HasValue)
-            inUse = occupied.Value || (!cfg.StrictDeviceMatch && consentActive);
-        else
-            inUse = consentActive; // 探测不出来（驱动不支持）时退回按系统记录判断
-
-        return new Detection(inUse, primary, cfg.DeviceName, instanceId, cfg.DeviceId);
+        // 只信系统记录：设备级占用探测（DirectShow 绑定 / MediaCapture 独占试开）
+        // 在本机上都不能可靠区分"空闲"和"被别人占用"，不能用它来压掉真实告警。
+        return new Detection(consentActive, primary, cfg.DeviceName, instanceId, cfg.DeviceId);
     }
 
     private void TryAlert(Detection detection)

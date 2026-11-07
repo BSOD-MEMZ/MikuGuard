@@ -1,5 +1,4 @@
 using System.Runtime.InteropServices;
-using System.Runtime.InteropServices.ComTypes;
 using System.Text;
 using Microsoft.Win32;
 
@@ -29,8 +28,6 @@ public static class CameraDeviceService
 {
     private static readonly Guid DevInterfaceVideoCamera = new("E5323777-F976-4F5B-9B55-B94699C46E44");
     private static readonly Guid DevInterfaceKsVideo = new("6994AD05-93EF-11D0-A3CC-00A0C9223196");
-    private static readonly Guid ClsidVideoInputDeviceCategory = new("860BB310-5D01-11D0-BD3B-00A0C911CE86");
-    private static readonly Guid ClsidSystemDeviceEnum = new("62BE5D10-60EB-11D0-BD3B-00A0C911CE86");
 
     private const uint CmGetDeviceInterfaceListPresent = 0;
 
@@ -95,7 +92,10 @@ public static class CameraDeviceService
     /// <summary>把接口路径转成设备实例 ID：\\?\usb#vid_x#y#{guid} -&gt; USB\VID_X\Y</summary>
     public static string ToInstanceId(string interfacePath)
     {
-        var p = interfacePath;
+        var p = interfacePath.Trim();
+        // DirectShow moniker 的显示名带 @device:pnp: 前缀
+        const string pnpPrefix = "@device:pnp:";
+        if (p.StartsWith(pnpPrefix, StringComparison.OrdinalIgnoreCase)) p = p[pnpPrefix.Length..];
         if (p.StartsWith(@"\\?\", StringComparison.Ordinal)) p = p[4..];
         var hashGuid = p.IndexOf("#{", StringComparison.Ordinal);
         if (hashGuid > 0) p = p[..hashGuid];
@@ -129,101 +129,6 @@ public static class CameraDeviceService
     }
 
     // ================= 占用探测 =================
-
-    /// <summary>
-    /// 探测指定摄像头是否被占用。
-    /// 返回 true = 被占用；false = 空闲；null = 无法判断（设备不在、驱动异常等）。
-    /// </summary>
-    public static bool? ProbeOccupied(string deviceId)
-    {
-        if (string.IsNullOrWhiteSpace(deviceId)) return null;
-        var target = NormalizePath(deviceId);
-
-        var monikers = new List<IMoniker>();
-        try
-        {
-            CollectMonikers(monikers);
-
-            foreach (var moniker in monikers)
-            {
-                string display;
-                try { moniker.GetDisplayName(null, null, out display); }
-                catch { continue; }
-
-                if (!string.Equals(NormalizePath(display), target, StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                object? filter = null;
-                try
-                {
-                    var iid = typeof(IBaseFilter).GUID;
-                    moniker.BindToObject(null, null, ref iid, out filter);
-                    return false; // 能绑上 → 设备空闲
-                }
-                catch (Exception ex)
-                {
-                    GuardLog.Info($"[device] {deviceId} 绑定失败，判定为占用：0x{ex.HResult:X8}");
-                    return true; // 绑不上 → 被别人独占
-                }
-                finally
-                {
-                    if (filter != null) Marshal.ReleaseComObject(filter);
-                }
-            }
-
-            return null;
-        }
-        catch (Exception ex)
-        {
-            GuardLog.Warn($"[device] 探测失败：{ex.Message}");
-            return null;
-        }
-        finally
-        {
-            foreach (var m in monikers) Marshal.ReleaseComObject(m);
-        }
-    }
-
-    private static void CollectMonikers(List<IMoniker> output)
-    {
-        object? devEnumObj = null;
-        IEnumMoniker? enumMoniker = null;
-        try
-        {
-            var type = Type.GetTypeFromCLSID(ClsidSystemDeviceEnum);
-            if (type == null) return;
-            devEnumObj = Activator.CreateInstance(type);
-            if (devEnumObj is not ICreateDevEnum devEnum) return;
-
-            var cat = ClsidVideoInputDeviceCategory;
-            if (devEnum.CreateClassEnumerator(ref cat, out enumMoniker, 0) != 0) return;
-
-            var buffer = new IMoniker[1];
-            while (enumMoniker.Next(1, buffer, IntPtr.Zero) == 0)
-            {
-                output.Add(buffer[0]);
-                buffer[0] = null!;
-            }
-        }
-        catch (Exception ex)
-        {
-            GuardLog.Warn($"[device] 枚举 DirectShow 设备失败：{ex.Message}");
-        }
-        finally
-        {
-            if (enumMoniker != null) Marshal.ReleaseComObject(enumMoniker);
-            if (devEnumObj != null) Marshal.ReleaseComObject(devEnumObj);
-        }
-    }
-
-    private static string NormalizePath(string path)
-    {
-        var p = path.Trim();
-        const string devicePnp = "@device:pnp:";
-        if (p.StartsWith(devicePnp, StringComparison.OrdinalIgnoreCase)) p = p[devicePnp.Length..];
-        if (p.EndsWith("#", StringComparison.Ordinal)) p = p[..^1];
-        return p;
-    }
 
     // ================= 启停设备 =================
 
@@ -289,18 +194,6 @@ public static class CameraDeviceService
     }
 
     // ================= 互操作声明 =================
-
-    [ComImport, Guid("56A86895-0AD0-11CE-B03A-0020AF0BA770"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    private interface IBaseFilter
-    {
-    }
-
-    [ComImport, Guid("29840822-5B84-11D0-BD3B-00A0C911CE86"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    private interface ICreateDevEnum
-    {
-        [PreserveSig]
-        int CreateClassEnumerator([In] ref Guid pType, out IEnumMoniker? ppEnumMoniker, int dwFlags);
-    }
 
     [DllImport("cfgmgr32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
     private static extern int CM_Get_Device_Interface_List_SizeW(out uint pulLen, ref Guid interfaceClassGuid,

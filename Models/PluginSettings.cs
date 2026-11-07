@@ -58,9 +58,6 @@ public partial class MonitorSettings : ObservableObject
     [ObservableProperty]
     private string _deviceName = "";
 
-    /// <summary>严格匹配所选摄像头：开启时只有选中的那台被占用才算触发。</summary>
-    [ObservableProperty]
-    private bool _strictDeviceMatch = true;
 }
 
 /// <summary>程序过滤设置。</summary>
@@ -101,6 +98,10 @@ public partial class AlertSettings : ObservableObject
     /// <summary>执行动作后，用一条通知回执告诉用户结果。</summary>
     [ObservableProperty]
     private bool _showActionResult = true;
+
+    /// <summary>提醒里显示的图片（相对路径按插件目录解析）。留空则不显示图片。</summary>
+    [ObservableProperty]
+    private string _imagePath = @"Assets\monitoring.jpg";
 }
 
 /// <summary>插件根设置。</summary>

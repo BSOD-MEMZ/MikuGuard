@@ -66,8 +66,21 @@ reader.FrameArrived += (s, e) =>
     done.TrySetResult($"拿到一帧：{bitmap.PixelWidth}x{bitmap.PixelHeight} {bitmap.BitmapPixelFormat} 共 {bytes.Length} 字节");
 };
 
+var hold = args.Contains("hold");
+
 var status = await reader.StartAsync();
 Console.WriteLine($"Reader 启动：{status}");
+
+if (hold)
+{
+    Console.WriteLine("HOLD: 占用 25 秒");
+    await Task.Delay(25000);
+    await reader.StopAsync();
+    reader.Dispose();
+    capture.Dispose();
+    Console.WriteLine("HOLD-DONE");
+    return;
+}
 
 var finished = await Task.WhenAny(done.Task, Task.Delay(6000));
 Console.WriteLine(finished == done.Task ? await done.Task : "6 秒内没有拿到帧");
