@@ -3,6 +3,8 @@ obj/
 cipx/
 dist/
 _probe/
+_probe*/
+_a_*
 *.user
 .vs/
 _prev*

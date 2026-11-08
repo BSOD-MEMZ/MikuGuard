@@ -304,7 +304,7 @@ internal sealed class HanabiPainter : ICustomDrawOperation
 
                     if (emitter.Material == 49)
                     {
-                        DrawRainbow(canvas, x, y, radius, sample);
+                        DrawRainbow(canvas, x, y, (float)sample.Diameter, sample);
                         continue;
                     }
 
@@ -341,195 +341,202 @@ internal sealed class HanabiPainter : ICustomDrawOperation
         }
     }
 
-    // ===================== 彩虹光环：assets/rainbow.hlsl 的逐行 SkSL 移植 =====================
+    // ===================== 彩虹光环：assets/rainbow.hlsl 的逐行移植 =====================
     //
-    // 这层不能用「同心环」「扇形盘」之类的近似——它同时叠了三样东西：
-    //   1. 按角度的色带（5 色 + 灰，用 9t/5 的步进随��间滚动）
-    //   2. 屏幕空间的网点（halftone），这就是官方截图里色块上的颗粒感
-    //   3. 半径方向的环带调制，再套圆形遮罩 + 径向衰减
-    // 原文件是反编译出来的 HLSL，这里一条一条照抄成 SkSL，交给 Skia 的 runtime effect 逐像素跑。
-
-    // ---------------- 彩虹光环 ----------------
+    // 这一层不再用「色带 + 网点」之类的近似，而是照原 shader 的公式逐像素算。
+    // 原文件是反编译出来的 HLSL，下面每条结论都能在代码里直接读到（不是看图的观感）：
     //
-    // 原版是 assets/rainbow.hlsl（逐像素的 fragment shader，反编译出来的）。我把它整段翻成 SkSL、
-    // 用 SKRuntimeEffect 跑——结果这个 Skia 构建里 runtime effect 一进 DrawRect 就原生崩溃
-    // （连 hello-world 级的 shader 也崩），这条路走不通。
-    // 所以改成用 Skia 的常规原语，按它的公式重新拼：
-    //   · 色带：hue = fract(角度×3/(2π) + floor(9t)/5)，用阈值 0.2/0.4/0.6/0.8 分 5 段上色
-    //     → 每帧按 floor(9t)/5 平移 sweep 渐变的 stop 位置，色块就会一圈圈地转
-    //   · 网点：shader 里那个 64 分格的屏幕空间圆点 → 平铺的点阵贴图，DstIn 叠上去
-    //   · 径向：fract(径向×4－2(1－透明度)) 的环带 + 圆形遮罩 + 外缘衰减
-    //   · 整体 ×0.75 不透明度
-    private static SKBitmap? _dotTile;
+    //   · 角度先被拆成三份（全部 frac）：
+    //       aY = frac(角×3/2π)       —— 挑颜色
+    //       aZ = frac(角×15/2π)      —— aZ<=0.5 的那一半是「灰」
+    //       aX = frac(角×15/2π+0.03) —— aX<=0.56 的那一半不打网点
+    //     所以绕一圈是 15 个彩扇 + 15 个灰扇交替（每个 12°）。
+    //   · 颜色只有 5 个（cb0[6..10]：粉/蓝/黄绿/黄/橙），按 aY 的 0.2/0.4/0.6/0.8 阈值挑；
+    //     cb0[5] 那个 0.5 的灰在色板里永远取不到（第一步 lerp 的条件恒为 0）——
+    //     也就是说「灰扇」不是色板里的灰，而是下面那个 k。
+    //   · 灰扇 = k = |径向-0.25|×3+0.25 的**灰度斜坡**，而且 alpha 还要 ×0.5。
+    //     它不是我之前画的那种 214 的白条。
+    //   · 网点是屏幕空间的 frac((屏幕坐标×2-1)×64)，被 (dots×band-0.1)×24+0.1 夹到 [0,1]，
+    //     再取 1- 得到 mask；band 来自 fract(径向×4-2(1-alpha)) 的三段折线，
+    //     所以网点只出现在一圈圈的环带上，而不是铺满。
+    //   · 收尾：radial<=0.5 收圆、radial 从 0.4149 起径向衰减、整体 ×0.75。
+    //
+    // SkiaSharp 2.88.9 的 SKRuntimeEffect 一画就原生崩溃（连 hello-world 级 shader 都崩），
+    // 所以这里在 CPU 上逐像素算完写进位图，再交给 Skia 缩放绘制。
+    // tools/hanabi_ref.py 是同一套公式的 numpy 版本，用来跟官方渲染图逐角度对数。
 
-    private static SKBitmap DotTile()
+    private static readonly SKColor[] RainbowSectors =   // cb0[6..10]，按 aY 从大到小
     {
-        if (_dotTile != null) return _dotTile;
+        new(237, 58, 156),   // 0.8~1.0 粉   cb0[6]
+        new(0, 160, 233),    // 0.6~0.8 蓝   cb0[7]
+        new(184, 210, 0),    // 0.4~0.6 黄绿 cb0[8]
+        new(255, 216, 0),    // 0.2~0.4 黄   cb0[9]
+        new(255, 90, 18)     // 0.0~0.2 橙   cb0[10]
+    };
 
-        const int n = 32;
-        var tile = new SKBitmap(n, n);
-        using (var canvas = new SKCanvas(tile))
-        using (var paint = new SKPaint { IsAntialias = true })
+    /// <summary>位图边长上限。彩虹层是纯几何图形，铺满到屏幕时用不着 1:1。</summary>
+    private const int RainbowBitmapCap = 720;
+
+    private static SKBitmap? _rainbowBitmap;
+
+    private static float Frac(float v) => v - MathF.Floor(v);
+
+    private void DrawRainbow(SKCanvas canvas, float cx, float cy, float quad, in HanabiSample sample)
+    {
+        if (quad < 4) return;
+
+        var tintA = (float)Math.Clamp(sample.A, 0, 1);
+        if (tintA <= 0.002) return;
+
+        var n = (int)Math.Clamp(MathF.Round(quad), 16, RainbowBitmapCap);
+        if (_rainbowBitmap is not { } bitmap || bitmap.Width != n)
         {
-            canvas.Clear(SKColors.Transparent);
-            for (var y = 0; y < n; y++)
+            _rainbowBitmap?.Dispose();
+            bitmap = new SKBitmap(new SKImageInfo(n, n, SKColorType.Rgba8888, SKAlphaType.Premul));
+            _rainbowBitmap = bitmap;
+        }
+
+        var half = quad * 0.5f;
+        var rot = (float)sample.Rotation;
+        var cos = MathF.Cos(rot);
+        var sin = MathF.Sin(rot);
+        var sw = (float)Math.Max(1, _size.Width);
+        var sh = (float)Math.Max(1, _size.Height);
+
+        // cb0[4].x * cb1[0].y = 9 * frame.z，再乘 1/5 当色板步进
+        var paletteOffset = (float)(Math.Floor(9.0 * (_now % 1000.0)) * 0.2 % 1.0);
+
+        // tint.a 参与两个地方：环带相位（2*(1-a)）和淡出
+        var ringOffset = 2f * (1f - tintA);
+        var gate = Math.Clamp((1f - tintA) / 0.2f, 0f, 1f);
+        var fadeBase = Math.Clamp(tintA / 0.4f, 0f, 1f);
+
+        const float nearEdge = 0.66f * 0.2499f + 0.25f;   // cb0[11].z
+
+        unsafe
+        {
+            var pixels = (uint*)bitmap.GetPixels().ToPointer();
+
+            for (var by = 0; by < n; by++)
             {
-                for (var x = 0; x < n; x++)
+                var v = (by + 0.5f) / n;          // uv.y
+                var a0 = v * 2f - 1f;             // r0.x = uv.y*2-1
+                var dyq = (v - 0.5f) * quad;
+                var row = pixels + by * n;
+
+                for (var bx = 0; bx < n; bx++)
                 {
-                    var dx = (x + 0.5) / n - 0.5;
-                    var dy = (y + 0.5) / n - 0.5;
-                    var d = Math.Sqrt(dx * dx + dy * dy);
-                    var v = 1.0 - d * 2.0;
-                    v = v <= 0 ? 0 : v * v;
-                    // 网点是「乘」在颜色上做明暗调制（不是加光）：最暗压到 55%，别再往下就是挖洞了
-                    var g = (byte)(140 + v * 115);
-                    tile.SetPixel(x, y, new SKColor(g, g, g, 255));
+                    var u = (bx + 0.5f) / n;      // uv.x
+                    var b0 = u * 2f - 1f;         // r0.y = uv.x*2-1
+
+                    // 圆形遮罩之外直接跳过（四角占 21% 的像素，且 atan2 不便宜）
+                    var rx = u - 0.5f;
+                    var ry = v - 0.5f;
+                    var radial = MathF.Sqrt(rx * rx + ry * ry);
+                    if (radial > 0.5f)
+                    {
+                        row[bx] = 0;
+                        continue;
+                    }
+
+                    // ---- atan2 近似（照抄）----
+                    var absA = MathF.Abs(a0);
+                    var absB = MathF.Abs(b0);
+                    var ratio = MathF.Min(absA, absB) / MathF.Max(MathF.Max(absA, absB), 1e-12f);
+                    var sq = ratio * ratio;
+                    var poly = sq * 0.0208351f - 0.085133f;
+                    poly = sq * poly + 0.180141f;
+                    poly = sq * poly - 0.3302995f;
+                    var coef = sq * poly + 0.999866f;
+                    var angle = ratio * coef;
+                    var tilt = -(angle * 2f) + 1.5707964f;
+                    if (absB >= absA) tilt = 0f;          // 仅当 |r0.y| < |r0.x| 时保留
+                    angle = angle + tilt;
+                    if (b0 < 0f) angle -= 3.1415927f;     // (1 - step(-y, y)) * -pi
+
+                    // ---- 象限修正 ----
+                    var lo = MathF.Min(b0, a0);
+                    var hi = MathF.Max(b0, a0);
+                    if (hi >= 0f && lo < 0f) angle = -angle;
+                    angle = (angle + 3.1415927f) * 3f;
+
+                    var aY = Frac(angle * 0.159154937f);
+                    var aZ = Frac(angle * 0.795774698f);
+                    var aX = Frac(angle * 0.795774698f + 0.03f);
+
+                    // ---- 色板 ----
+                    var y = Frac(paletteOffset + aY);
+                    var color = y >= 0.8f ? RainbowSectors[0]
+                        : y >= 0.6f ? RainbowSectors[1]
+                        : y >= 0.4f ? RainbowSectors[2]
+                        : y >= 0.2f ? RainbowSectors[3]
+                        : RainbowSectors[4];
+
+                    var isSector = 0.56f >= aX;    // 这一半不打网点
+                    var isGray = 0.5f >= aZ;       // 这一半是灰度斜坡
+
+                    // ---- 环带 + 网点 ----
+                    var rc = Frac(radial * 4f - ringOffset);
+                    var band = rc <= 0.8f ? rc * rc * 1.125f + 0.1f
+                        : rc <= 0.82f ? (rc - 0.8f) * -25f + 1f
+                        : (rc - 0.82f) * -2.7777777f + 0.5f;
+
+                    var dqx = (u - 0.5f) * quad;
+                    var sxp = cx + cos * dqx - sin * dyq;
+                    var syp = cy + sin * dqx + cos * dyq;
+                    var gx = Frac((sxp / sw * 2f - 1f) * 64f) - 0.5f;
+                    var gy = Frac(((1f - syp / sh) * 2f - 1f) * 64f) - 0.5f;
+                    var dot = 1f - MathF.Sqrt(gx * gx + gy * gy);
+                    var dots = dot * dot;
+
+                    var mask = 1f - Math.Clamp((dots * band - 0.1f) * 24f + 0.1f, 0f, 1f);
+                    var sector = isSector ? 1f : mask;
+
+                    // k 是灰度斜坡：中心亮、径向 0.25 处最暗、到边缘又亮
+                    var k = MathF.Abs(radial - 0.25f) * 3f + 0.25f;
+
+                    float r, g, b;
+                    if (isGray)
+                    {
+                        r = g = b = k;
+                    }
+                    else
+                    {
+                        var m = (1f + sector * (k - 1f)) / 255f;
+                        r = color.Red * m;
+                        g = color.Green * m;
+                        b = color.Blue * m;
+                    }
+
+                    // ---- alpha ----
+                    var a1 = Math.Clamp((radial - gate) * -3f - 0.5f, 0f, 1f);
+                    var a2 = Math.Clamp((fadeBase + radial) * 2f - 1f, 0f, 1f);
+                    var alpha = a1 * a2 * (isGray ? 0.5f : 1f);
+                    alpha *= Math.Clamp((nearEdge - radial) / (0.5f - nearEdge) + 1f, 0f, 1f);
+                    alpha *= 0.75f;
+                    if (alpha <= 0.002f)
+                    {
+                        row[bx] = 0;
+                        continue;
+                    }
+
+                    var aa = (uint)Math.Clamp((int)(alpha * 255f + 0.5f), 0, 255);
+                    var rr = (uint)Math.Clamp((int)(r * alpha * 255f + 0.5f), 0, (int)aa);
+                    var gg = (uint)Math.Clamp((int)(g * alpha * 255f + 0.5f), 0, (int)aa);
+                    var bb = (uint)Math.Clamp((int)(b * alpha * 255f + 0.5f), 0, (int)aa);
+                    row[bx] = (aa << 24) | (bb << 16) | (gg << 8) | rr;
                 }
             }
         }
 
-        _dotTile = tile;
-        return tile;
-    }
-
-    /// <summary>往白色里揉一点，得到官方那种淡彩观感。</summary>
-    private static SKColor Pastel(SKColor color, float amount = 0.18f)
-    {
-        byte Mix(byte v) => (byte)(v + (255 - v) * amount);
-        return new SKColor(Mix(color.Red), Mix(color.Green), Mix(color.Blue), color.Alpha);
-    }
-
-    /// <summary>按 shader 的分带规则，算出 sweep 渐变（色带会随时间步进平移）。</summary>
-    private static SKColor[] BuildSectorColors(double time, out float[] positions)
-    {
-        // 按 shader 的阈值链推出来的真实分段：
-        //   step(1.0, y) 恒为 0 → 第二段把颜色覆盖成 cb7(蓝)
-        //   剩下的阈值是 0.2 / 0.4 / 0.6，所以最后那段是双倍宽（0.6~1.0）
-        //   cb5(灰) 和 cb6(粉) 都会被后面覆盖掉，实际不出现——官方图里的粉色是另一层的色轮给的
-        // 官方是粉/橙/黄/黄绿/蓝轮转（cb6~cb10 五个调色板颜色），转一圈重复 3 次
-        var palette = new[]
+        canvas.Save();
+        canvas.RotateDegrees((float)(rot * 180 / Math.PI), cx, cy);
+        using (var paint = new SKPaint { IsAntialias = true, FilterQuality = SKFilterQuality.Low })
         {
-            Pastel(new SKColor(237, 58, 156)),   // 粉  cb6
-            Pastel(new SKColor(255, 90, 18)),    // 橙  cb10
-            Pastel(new SKColor(255, 216, 0)),    // 黄  cb9
-            Pastel(new SKColor(184, 210, 0)),    // 黄绿 cb8
-            Pastel(new SKColor(0, 160, 233))     // 蓝  cb7
-        };
-
-        // shader：y = fract(角度×3/(2π) + offset)，offset = floor(9t)/5
-        var offset = (float)(Math.Floor(9.0 * time) / 5.0 % 1.0);
-        const int cycles = 3;
-        const int steps = 720;
-
-        var colors = new List<SKColor>();
-        var pos = new List<float>();
-
-        // 官方渲染里条纹是「彩条 / 灰白条」交替，而且**每条之间有空隙**：
-        // 沿圆弧取亮度剖面，亮暗各占一半，暗的地方能掉到 30/255（基本透明）。
-        // 所以按 15 彩 + 15 灰 = 30 个槽、每槽只占一半来切。
-        var gray = new SKColor(214, 214, 214);
-        var clear = SKColor.Empty;
-        const int slots = 30;
-        const float duty = 0.5f;      // 每条只占槽宽的一半，剩下是空隙
-
-        for (var i = 0; i < slots; i++)
-        {
-            var slot0 = (float)i / slots;
-            var slot1 = (float)(i + 1) / slots;
-
-            SKColor color;
-            if (i % 2 == 1)
-            {
-                color = gray;
-            }
-            else
-            {
-                // 15 个彩槽 = 5 色 × 3 圈；offset 让色带随时间步进平移
-                var shifted = (float)((i / 2) / 5.0 + offset * cycles);
-                shifted -= (float)Math.Floor(shifted);
-                color = palette[(int)(shifted * palette.Length) % palette.Length];
-            }
-
-            var colorEnd = slot0 + (slot1 - slot0) * duty;
-
-            // 亮条
-            colors.Add(color);
-            pos.Add(slot0);
-            colors.Add(color);
-            pos.Add(Math.Max(slot0, colorEnd - 0.0004f));
-            // 空隙
-            colors.Add(clear);
-            pos.Add(Math.Max(slot0, colorEnd));
-            colors.Add(clear);
-            pos.Add(Math.Max(slot0, slot1 - 0.0004f));
+            canvas.DrawBitmap(bitmap, new SKRect(cx - half, cy - half, cx + half, cy + half), paint);
         }
 
-        colors.Add(colors[0]);
-        pos.Add(1f);
-        positions = pos.ToArray();
-        return colors.ToArray();
-    }
-
-    /// <summary>彩虹光环：色带 + 网点 + 圆形遮罩 + 径向衰减。</summary>
-    private void DrawRainbow(SKCanvas canvas, float x, float y, float radius, in HanabiSample sample)
-    {
-        if (radius < 2) return;
-
-        // shader 里最终是 outA = a1 * 0.75，而且 a1 只在中段接近 1；
-        // 这里再压一档——彩虹盘如果太实，screen 叠上去的放射光芒就完全看不出来了
-        var alpha = (float)Math.Clamp(sample.A * 0.85, 0, 1);
-        if (alpha <= 0.004) return;
-
-        var colors = BuildSectorColors(_now, out var positions);
-
-        var outer = canvas.SaveLayer();
-        canvas.Translate(x, y);
-        canvas.RotateDegrees((float)(sample.Rotation * 180 / Math.PI));
-
-        // 圆形遮罩（shader 里是靠 step(length(uv-.5), .5) 限制的）
-        using (var clip = new SKPath())
-        {
-            clip.AddCircle(0, 0, radius);
-            canvas.ClipPath(clip, SKClipOperation.Intersect, true);
-        }
-
-        // 1) 色带：只把这一层做模糊（官方的楔形边缘是柔的），网点要留清晰，所以分开两层
-        var blur = Math.Max(0.8f, radius * 0.004f);
-        using (var layerPaint = new SKPaint { ImageFilter = SKImageFilter.CreateBlur(blur, blur) })
-        {
-            var inner = canvas.SaveLayer(layerPaint);
-            using var sweep = SKShader.CreateSweepGradient(SKPoint.Empty, colors, positions, SKMatrix.Identity);
-            using var sectorPaint = new SKPaint
-            {
-                IsAntialias = true,
-                Style = SKPaintStyle.Fill,
-                Shader = sweep,
-                BlendMode = SKBlendMode.SrcOver,
-                Color = SKColors.White.WithAlpha((byte)(alpha * 255))
-            };
-            canvas.DrawRect(new SKRect(-radius, -radius, radius, radius), sectorPaint);
-            canvas.RestoreToCount(inner);
-        }
-
-        // 2) 网点（屏幕空间 128 格），只提亮不挖洞
-        var cell = (float)(_size.Width / 128.0);
-        using (var dot = SKShader.CreateBitmap(DotTile(), SKShaderTileMode.Repeat, SKShaderTileMode.Repeat,
-                   SKMatrix.CreateScale(cell / 32f, cell / 32f)))
-        using (var dotPaint = new SKPaint { Shader = dot, BlendMode = SKBlendMode.Modulate })
-        {
-            canvas.DrawRect(new SKRect(-radius, -radius, radius, radius), dotPaint);
-        }
-
-        // 3) 径向衰减
-        using (var fade = SKShader.CreateRadialGradient(SKPoint.Empty, radius,
-                   new[] { SKColors.White, SKColors.White, new SKColor(255, 255, 255, 150), new SKColor(255, 255, 255, 0) },
-                   new[] { 0f, 0.82f, 0.95f, 1f }, SKShaderTileMode.Clamp))
-        using (var fadePaint = new SKPaint { Shader = fade, BlendMode = SKBlendMode.DstIn })
-        {
-            canvas.DrawRect(new SKRect(-radius, -radius, radius, radius), fadePaint);
-        }
-
-        canvas.RestoreToCount(outer);
+        canvas.Restore();
     }
 
     /// <summary>用一个颜色去乘贴图（等价于 shader 里的 rgb *= tint）。</summary>

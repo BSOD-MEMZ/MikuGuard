@@ -3,6 +3,8 @@
   <PropertyGroup>
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <Nullable>enable</Nullable>
+    <!-- 彩虹光环层在 CPU 上逐像素算，需要直接写位图 -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>MikuGuard</AssemblyName>
     <RootNamespace>MikuGuard</RootNamespace>

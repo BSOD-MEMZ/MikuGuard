@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using System.Diagnostics;
 using MikuGuard.Services.Hanabi;
 
 namespace MikuGuard.Tools.HanabiProbe;
@@ -11,6 +12,7 @@ namespace MikuGuard.Tools.HanabiProbe;
 /// </summary>
 internal static class Program
 {
+    private static readonly Stopwatch SW = new();
     private const int Width = 1200;
     private const int Height = 675;
 
@@ -66,7 +68,9 @@ internal static class Program
             {
                 ctx.FillRectangle(new SolidColorBrush(Color.FromRgb(10, 12, 16)),
                     new Rect(0, 0, Width, Height));
+                SW.Restart();
                 HanabiRenderer.Render(ctx, sim, t, new Size(Width, Height));
+                Console.Write($"  渲染 {SW.ElapsedMilliseconds}ms  ");
             }
 
             var path = Path.Combine(outDir, $"frame_{t:0.00}.png");
