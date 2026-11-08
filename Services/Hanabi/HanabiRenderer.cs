@@ -380,9 +380,10 @@ internal sealed class HanabiPainter : ICustomDrawOperation
                     var dy = (y + 0.5) / n - 0.5;
                     var d = Math.Sqrt(dx * dx + dy * dy);
                     var v = 1.0 - d * 2.0;
-                    if (v <= 0) continue;
-                    v *= v;
-                    tile.SetPixel(x, y, new SKColor(255, 255, 255, (byte)(v * 255)));
+                    v = v <= 0 ? 0 : v * v;
+                    // 网点是「乘」在颜色上做明暗调制（不是加光）：最暗压到 55%，别再往下就是挖洞了
+                    var g = (byte)(140 + v * 115);
+                    tile.SetPixel(x, y, new SKColor(g, g, g, 255));
                 }
             }
         }
@@ -421,28 +422,36 @@ internal sealed class HanabiPainter : ICustomDrawOperation
         var colors = new List<SKColor>();
         var pos = new List<float>();
 
-        var last = -1;
-        for (var i = 0; i <= steps; i++)
-        {
-            var u = (float)i / steps;                 // sweep 参数 0..1
-            var y = u * cycles + offset;
-            y -= (float)Math.Floor(y);
-            var band = y < 0.2f ? 0 : y < 0.4f ? 1 : y < 0.6f ? 2 : 3;
-            if (band == last) continue;
+        // 官方渲染里是「彩条 / 灰白条」交替：灰白来自 shader 的 cb5(0.5,0.5,0.5)，
+        // 也就是说每段色带的后半截被灰白顶掉。这里就按 24 条（12 段 × 彩+灰）来切。
+        var gray = new SKColor(190, 190, 190);
+        const int stripes = 24;
 
-            // 色块之间是硬边界：在上一个颜色收尾的位置再插一个平移后的新颜色
-            if (last >= 0)
+        for (var i = 0; i < stripes; i++)
+        {
+            var u0 = (float)i / stripes;
+            var u1 = (float)(i + 1) / stripes;
+
+            SKColor color;
+            if (i % 2 == 1)
             {
-                colors.Add(palette[last]);
-                pos.Add(Math.Max(0f, u - 0.0006f));
+                color = gray;
+            }
+            else
+            {
+                var y = u0 * cycles + offset;
+                y -= (float)Math.Floor(y);
+                var band = y < 0.2f ? 0 : y < 0.4f ? 1 : y < 0.6f ? 2 : 3;
+                color = palette[band];
             }
 
-            colors.Add(palette[band]);
-            pos.Add(u);
-            last = band;
+            colors.Add(color);
+            pos.Add(u0);
+            colors.Add(color);
+            pos.Add(Math.Max(u0, u1 - 0.0006f));
         }
 
-        colors.Add(colors[^1]);
+        colors.Add(colors[0]);
         pos.Add(1f);
         positions = pos.ToArray();
         return colors.ToArray();
@@ -455,7 +464,7 @@ internal sealed class HanabiPainter : ICustomDrawOperation
 
         // shader 里最终是 outA = a1 * 0.75，而且 a1 只在中段接近 1；
         // 这里再压一档——彩虹盘如果太实，screen 叠上去的放射光芒就完全看不出来了
-        var alpha = (float)Math.Clamp(sample.A * 0.45, 0, 1);
+        var alpha = (float)Math.Clamp(sample.A * 0.85, 0, 1);
         if (alpha <= 0.004) return;
 
         var colors = BuildSectorColors(_now, out var positions);
@@ -472,7 +481,7 @@ internal sealed class HanabiPainter : ICustomDrawOperation
         }
 
         // 1) 色带：只把这一层做模糊（官方的楔形边缘是柔的），网点要留清晰，所以分开两层
-        var blur = Math.Max(1.2f, radius * 0.008f);
+        var blur = Math.Max(0.8f, radius * 0.004f);
         using (var layerPaint = new SKPaint { ImageFilter = SKImageFilter.CreateBlur(blur, blur) })
         {
             var inner = canvas.SaveLayer(layerPaint);
@@ -493,20 +502,15 @@ internal sealed class HanabiPainter : ICustomDrawOperation
         var cell = (float)(_size.Width / 128.0);
         using (var dot = SKShader.CreateBitmap(DotTile(), SKShaderTileMode.Repeat, SKShaderTileMode.Repeat,
                    SKMatrix.CreateScale(cell / 32f, cell / 32f)))
-        using (var dotPaint = new SKPaint
-               {
-                   Shader = dot,
-                   BlendMode = SKBlendMode.Plus,
-                   Color = SKColors.White.WithAlpha((byte)(0.30 * 255))
-               })
+        using (var dotPaint = new SKPaint { Shader = dot, BlendMode = SKBlendMode.Modulate })
         {
             canvas.DrawRect(new SKRect(-radius, -radius, radius, radius), dotPaint);
         }
 
         // 3) 径向衰减
         using (var fade = SKShader.CreateRadialGradient(SKPoint.Empty, radius,
-                   new[] { SKColors.White, new SKColor(255, 255, 255, 235), new SKColor(255, 255, 255, 90), new SKColor(255, 255, 255, 0) },
-                   new[] { 0f, 0.45f, 0.8f, 1f }, SKShaderTileMode.Clamp))
+                   new[] { SKColors.White, SKColors.White, new SKColor(255, 255, 255, 150), new SKColor(255, 255, 255, 0) },
+                   new[] { 0f, 0.82f, 0.95f, 1f }, SKShaderTileMode.Clamp))
         using (var fadePaint = new SKPaint { Shader = fade, BlendMode = SKBlendMode.DstIn })
         {
             canvas.DrawRect(new SKRect(-radius, -radius, radius, radius), fadePaint);
