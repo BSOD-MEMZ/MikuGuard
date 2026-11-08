@@ -1,7 +1,7 @@
 id: mikuguard.camera-guard
 name: MikuGuard
 apiVersion: 2.0.0.0
-description: 摄像头安全守护 —— 摄像头被调用时在信息岛亮起指示点，并弹出带「消除提醒 / 关闭摄像头 / 关闭应用」按钮的 Windows 通知。
+description: 摄像头安全守护，防老师视奸利器。
 entranceAssembly: "MikuGuard.dll"
 url: https://github.com/BSOD-MEMZ/MikuGuard
 author: xxt8582753

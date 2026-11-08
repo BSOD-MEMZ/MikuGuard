@@ -12,7 +12,7 @@ namespace MikuGuard.Automation;
 /// </summary>
 public static class MikuGuardAutomation
 {
-    private const string RootGroupName = "MikuGuard 摄像头守护";
+    private const string RootGroupName = "MikuGuard";
     private const string RootGroupIcon = "\uE392";   // camera
 
     public static void Register(IServiceCollection services)
@@ -46,7 +46,7 @@ public static class MikuGuardAutomation
                 s => s.Presentation = AlertPresentation.Auto),
             Item<SetPresentationActionSettings>(SetPresentationAction.Id, "仅 Windows 通知", "\uF483",
                 s => s.Presentation = AlertPresentation.WindowsToast),
-            Item<SetPresentationActionSettings>(SetPresentationAction.Id, "仅插件内弹窗（不发 Toast）", "\uE8D1",
+            Item<SetPresentationActionSettings>(SetPresentationAction.Id, "仅插件内弹窗", "\uE8D1",
                 s => s.Presentation = AlertPresentation.InApp)));
 
         // 即时操作

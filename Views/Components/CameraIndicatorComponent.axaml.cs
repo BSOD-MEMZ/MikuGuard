@@ -22,7 +22,7 @@ namespace MikuGuard.Views.Components;
     "3F9C1D64-71B2-4A55-9C0E-2B8D5A6F1C71",
     "摄像头安全指示器",
     "\uE392",
-    "摄像头被调用时显示指示点（颜色、图标可自定义）")]
+    "摄像头被调用时显示指示点")]
 public partial class CameraIndicatorComponent : ComponentBase<CameraIndicatorSettings>
 {
     private CameraGuardService? _service;

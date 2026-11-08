@@ -168,7 +168,7 @@ public sealed class CameraAlertService
     private static string BuildBody(GuardAlert alert)
     {
         var app = string.IsNullOrWhiteSpace(alert.AppDisplay) ? "某个程序" : alert.AppDisplay;
-        var device = string.IsNullOrWhiteSpace(alert.DeviceName) ? "摄像头" : $"「{alert.DeviceName}」";
-        return $"{app} 正在使用{device}。如果不是你打开的，可以直接关掉它。";
+        var device = string.IsNullOrWhiteSpace(alert.DeviceName) ? "摄像头" : $"{alert.DeviceName}";
+        return $"{app} 正在使用{device}，请注意隐私安全！";
     }
 }

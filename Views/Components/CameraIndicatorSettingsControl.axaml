@@ -26,7 +26,7 @@
 
             <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE454;}"
                                  Header="外圈描边"
-                                 Description="圆点外围的描边颜色，把不透明度拉到 0 即不描边。">
+                                 Description="圆点外围的描边颜色，把不透明度设为 0 即不描边。">
                 <fa:SettingsExpander.Footer>
                     <ColorPicker Color="{Binding Settings.RingColor, Mode=TwoWay}" VerticalAlignment="Center" />
                 </fa:SettingsExpander.Footer>
@@ -34,7 +34,7 @@
 
             <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE9B2;}"
                                  Header="图标与颜色"
-                                 Description="展开时显示在圆点里的 Fluent 图标字形，留空则不显示。">
+                                 Description="显示在圆点内的 Fluent 图标字形。">
                 <fa:SettingsExpander.Footer>
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <ci:FluentIcon Glyph="{Binding GlyphPreview}" FontSize="16"
@@ -61,7 +61,7 @@
 
             <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE8D1;}"
                                  Header="展开尺寸"
-                                 Description="刚检测到摄像头时放大显示的直径（用于露出图标）。">
+                                 Description="检测到摄像头时放大显示的直径（用于显示图标）。">
                 <fa:SettingsExpander.Footer>
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Slider Width="140" Minimum="8" Maximum="64" TickFrequency="2"
@@ -74,7 +74,7 @@
 
             <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xF361;}"
                                  Header="展开停留时间"
-                                 Description="放大状态保持多久后收缩为小圆点。0 表示一直保持放大。">
+                                 Description="放大状态保持一段时间后收缩为小圆点。">
                 <fa:SettingsExpander.Footer>
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Slider Width="140" Minimum="0" Maximum="10000" TickFrequency="250"
@@ -103,19 +103,19 @@
 
             <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE8D1;}"
                                  Header="涟漪样式"
-                                 Description="岛内涟漪只染一层信息岛；花火会在整块屏幕上开一朵 maimai 烟花。"
+                                 Description="选择 Ripple 样式。"
                                  IsVisible="{Binding Settings.RippleEnabled}">
                 <fa:SettingsExpander.Footer>
                     <ComboBox Width="180" SelectedIndex="{Binding RippleStyleIndex, Mode=TwoWay}">
-                        <ComboBoxItem Content="岛内涟漪" />
-                        <ComboBoxItem Content="全屏花火" />
+                        <ComboBoxItem Content="MD3 Ripple" />
+                        <ComboBoxItem Content="舞萌DX Hanabi" />
                     </ComboBox>
                 </fa:SettingsExpander.Footer>
             </fa:SettingsExpander>
 
             <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xF361;}"
                                  Header="涟漪时长"
-                                 Description="扩散动画持续时间（MD3 fast-out-slow-in 曲线）。"
+                                 Description="扩散动画持续时间。"
                                  IsVisible="{Binding IsIslandRipple}">
                 <fa:SettingsExpander.Footer>
                     <StackPanel Orientation="Horizontal" Spacing="8">

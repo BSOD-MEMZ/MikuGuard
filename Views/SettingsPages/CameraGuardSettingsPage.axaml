@@ -29,7 +29,7 @@
 
             <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xEF4F;}"
                                  Header="启用摄像头守护"
-                                 Description="关掉后不再检测摄像头使用情况，指示点与提醒都不会出现。">
+                                 Description="关掉后不再检测摄像头使用情况。">
                 <fa:SettingsExpander.Footer>
                     <ToggleSwitch IsChecked="{Binding Settings.Monitor.Enabled, Mode=TwoWay}" />
                 </fa:SettingsExpander.Footer>
@@ -37,7 +37,7 @@
 
             <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xF361;}"
                                  Header="检测间隔"
-                                 Description="多久查一次系统摄像头访问记录。越短越及时，也越费 CPU。">
+                                 Description="查询系统摄像头访问记录间隔。">
                 <fa:SettingsExpander.Footer>
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Slider Width="150" Minimum="400" Maximum="6000" TickFrequency="100"
@@ -51,7 +51,7 @@
 
             <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xF18E;}"
                                  Header="监视目标"
-                                 Description="只用来定位「预览」打开哪台设备；是否提醒由系统访问记录决定。">
+                                 Description="选择受保护的摄像头。">
                 <fa:SettingsExpander.Footer>
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <ComboBox Width="200"
@@ -66,7 +66,7 @@
                         <Button Content="刷新" Command="{Binding RefreshDevicesCommand}" />
                         <Button Content="预览" Command="{Binding PreviewCameraCommand}"
                                 IsEnabled="{Binding HasConcreteDevice}"
-                                ToolTip.Tip="打开预览窗口看这台摄像头的画面" />
+                                ToolTip.Tip="打开预览窗口查看此摄像头画面" />
                     </StackPanel>
                 </fa:SettingsExpander.Footer>
             </fa:SettingsExpander>
@@ -75,19 +75,19 @@
 
             <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE833;}"
                                  Header="匹配模式"
-                                 Description="决定名单是「放行」还是「拦下」。">
+                                 Description="设置提醒的黑白名单。">
                 <fa:SettingsExpander.Footer>
                     <ComboBox Width="220" SelectedIndex="{Binding ModeIndex, Mode=TwoWay}">
-                        <ComboBoxItem Content="黑名单：名单内不提醒" />
-                        <ComboBoxItem Content="白名单：只提醒名单内" />
-                        <ComboBoxItem Content="全部提醒（不看名单）" />
+                        <ComboBoxItem Content="黑名单（名单内不提醒）" />
+                        <ComboBoxItem Content="白名单（只提醒名单内）" />
+                        <ComboBoxItem Content="全部提醒" />
                     </ComboBox>
                 </fa:SettingsExpander.Footer>
             </fa:SettingsExpander>
 
             <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xF1F6;}"
                                  Header="过滤名单"
-                                 Description="可以填完整路径、exe 文件名或 UWP 包族名。"
+                                 Description="请填写完整路径、exe 文件名或 UWP 包族名。"
                                  IsExpanded="True">
                 <StackPanel>
                     <ItemsControl ItemsSource="{Binding Settings.Filter.Entries}">
@@ -104,12 +104,12 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <TextBlock Text="名单还是空的，添加一个程序试试。"
+                    <TextBlock Text="当前名单为空"
                                FontSize="12" Opacity="0.6" Margin="16,6,0,6"
                                IsVisible="{Binding HasNoFilterEntries}" />
 
                     <fa:SettingsExpanderItem Content="添加程序"
-                                             Description="直接输入，或点「浏览」挑一个 exe。"
+                                             Description="输入路径或打开 exe。"
                                              Classes="has-radius">
                         <fa:SettingsExpanderItem.Footer>
                             <StackPanel Orientation="Horizontal" Spacing="8">
@@ -125,7 +125,7 @@
 
             <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE075;}"
                                  Header="正在使用摄像头的程序"
-                                 Description="系统访问记录里当前处于「使用中」的程序，可以直接加入名单。"
+                                 Description="系统访问记录里当前处于使用中的程序。"
                                  IsExpanded="True">
                 <StackPanel>
                     <ItemsControl ItemsSource="{Binding DetectedApps}">
@@ -142,7 +142,7 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <TextBlock Text="（当前没有程序在使用摄像头）"
+                    <TextBlock Text="当前没有程序在使用摄像头"
                                FontSize="12" Opacity="0.6" Margin="16,6,0,6"
                                IsVisible="{Binding HasNoDetectedApps}" />
                 </StackPanel>
@@ -152,7 +152,7 @@
 
             <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE025;}"
                                  Header="弹出提醒"
-                                 Description="摄像头被程序占用时提醒你。指示点不受这个开关影响。">
+                                 Description="摄像头被程序占用时弹出 Toast 警告。">
                 <fa:SettingsExpander.Footer>
                     <ToggleSwitch IsChecked="{Binding Settings.Alert.Enabled, Mode=TwoWay}" />
                 </fa:SettingsExpander.Footer>
@@ -160,7 +160,7 @@
 
             <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xEB70;}"
                                  Header="提醒方式"
-                                 Description="「自动」在 Windows 通知发不出去时改用插件内弹窗。">
+                                 Description="确保使用的通知渠道可见。">
                 <fa:SettingsExpander.Footer>
                     <ComboBox Width="180" SelectedIndex="{Binding PresentationIndex, Mode=TwoWay}">
                         <ComboBoxItem Content="自动（推荐）" />
@@ -172,7 +172,7 @@
 
             <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE9A8;}"
                                  Header="提醒冷却"
-                                 Description="同一次使用期间，两次提醒之间至少隔这么久。">
+                                 Description="同一次使用期间多次提醒之间的间隔">
                 <fa:SettingsExpander.Footer>
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Slider Width="150" Minimum="0" Maximum="600" TickFrequency="10"
@@ -186,7 +186,7 @@
 
             <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xF26F;}"
                                  Header="标题文字"
-                                 Description="提醒的标题，留空则使用「摄像头正在被使用」。">
+                                 Description="提醒的标题文本。">
                 <fa:SettingsExpander.Footer>
                     <TextBox Width="220" Text="{Binding Settings.Alert.Title, Mode=TwoWay}" />
                 </fa:SettingsExpander.Footer>
@@ -194,7 +194,7 @@
 
             <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE9B2;}"
                                  Header="提醒配图"
-                                 Description="Windows 通知里作为大图显示，插件内弹窗显示在顶部。">
+                                 Description="显示在弹窗顶部的大图。">
                 <fa:SettingsExpander.Footer>
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <TextBox Width="200" Text="{Binding Settings.Alert.ImagePath, Mode=TwoWay}" />
@@ -206,7 +206,7 @@
 
             <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE671;}"
                                  Header="「消除提醒」按钮"
-                                 Description="在提醒里放一个「本次不再打扰」的按钮。">
+                                 Description="单击此按钮关闭提醒。">
                 <fa:SettingsExpander.Footer>
                     <ToggleSwitch IsChecked="{Binding Settings.Alert.ShowDismissAction, Mode=TwoWay}" />
                 </fa:SettingsExpander.Footer>
@@ -214,7 +214,7 @@
 
             <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xEE0F;}"
                                  Header="「关闭应用」按钮"
-                                 Description="在提醒里放一个「直接关掉这个程序」的按钮。">
+                                 Description="此功能可能在某些设备上不工作。">
                 <fa:SettingsExpander.Footer>
                     <ToggleSwitch IsChecked="{Binding Settings.Alert.ShowCloseAppAction, Mode=TwoWay}" />
                 </fa:SettingsExpander.Footer>
@@ -222,7 +222,7 @@
 
             <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xEE55;}"
                                  Header="操作结果回执"
-                                 Description="点完提醒里的按钮后，再用一条通知告诉你结果。">
+                                 Description="提醒操作按钮回执。">
                 <fa:SettingsExpander.Footer>
                     <ToggleSwitch IsChecked="{Binding Settings.Alert.ShowActionResult, Mode=TwoWay}" />
                 </fa:SettingsExpander.Footer>

@@ -10,7 +10,7 @@ using MikuGuard.ViewModels;
 
 namespace MikuGuard.Views.SettingsPages;
 
-[SettingsPageInfo("mikuguard.camera-guard", "摄像头守护", "\uE392", "\uE392")]
+[SettingsPageInfo("mikuguard.camera-guard", "MikuGuard", "\uE392", "\uE392")]
 public partial class CameraGuardSettingsPage : SettingsPageBase
 {
     public CameraGuardSettingsViewModel ViewModel { get; }

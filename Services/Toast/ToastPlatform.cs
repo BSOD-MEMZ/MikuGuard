@@ -73,7 +73,7 @@ public static class ToastPlatform
     {
         using var key = Registry.CurrentUser.CreateSubKey(AumidRegPath);
         if (key == null) throw new InvalidOperationException("无法创建 AUMID 注册表项");
-        key.SetValue("DisplayName", "MikuGuard 摄像头守护");
+        key.SetValue("DisplayName", "MikuGuard");
         if (!string.IsNullOrEmpty(iconPath) && File.Exists(iconPath))
             key.SetValue("IconUri", iconPath);
         key.SetValue("CustomActivator", "{" + ActivatorClsid.ToString().ToUpperInvariant() + "}");
@@ -103,7 +103,7 @@ public static class ToastPlatform
 
         ShellShortcut.CreateWithAumid(ShortcutPath, exePath,
             !string.IsNullOrEmpty(iconPath) && File.Exists(iconPath) ? iconPath : exePath,
-            "MikuGuard 摄像头守护", Aumid);
+            "MikuGuard", Aumid);
     }
 
     // ================= Shell 快捷方式 =================
