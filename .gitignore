@@ -1,6 +1,7 @@
 bin/
 obj/
 cipx/
+dist/
 _probe/
 *.user
 .vs/

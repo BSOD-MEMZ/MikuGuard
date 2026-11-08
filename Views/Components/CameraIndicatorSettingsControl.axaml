@@ -101,9 +101,22 @@
                 </fa:SettingsExpander.Footer>
             </fa:SettingsExpander>
 
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE8D1;}"
+                                 Header="涟漪样式"
+                                 Description="岛内涟漪只染一层信息岛；花火会在整块屏幕上开一朵 maimai 烟花。"
+                                 IsVisible="{Binding Settings.RippleEnabled}">
+                <fa:SettingsExpander.Footer>
+                    <ComboBox Width="180" SelectedIndex="{Binding RippleStyleIndex, Mode=TwoWay}">
+                        <ComboBoxItem Content="岛内涟漪" />
+                        <ComboBoxItem Content="全屏花火" />
+                    </ComboBox>
+                </fa:SettingsExpander.Footer>
+            </fa:SettingsExpander>
+
             <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xF361;}"
                                  Header="涟漪时长"
-                                 Description="扩散动画持续时间（MD3 fast-out-slow-in 曲线）。">
+                                 Description="扩散动画持续时间（MD3 fast-out-slow-in 曲线）。"
+                                 IsVisible="{Binding IsIslandRipple}">
                 <fa:SettingsExpander.Footer>
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Slider Width="140" Minimum="200" Maximum="2000" TickFrequency="20"
@@ -116,7 +129,8 @@
 
             <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE51E;}"
                                  Header="涟漪强度"
-                                 Description="涟漪最浓时的填充不透明度。">
+                                 Description="涟漪最浓时的填充不透明度。"
+                                 IsVisible="{Binding IsIslandRipple}">
                 <fa:SettingsExpander.Footer>
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Slider Width="140" Minimum="0.05" Maximum="0.6" TickFrequency="0.01"

@@ -5,6 +5,16 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace MikuGuard.Models;
 
+/// <summary>指示点亮起时，给的「扩散」效果。</summary>
+public enum RippleStyle
+{
+    /// <summary>只在信息岛内部扩散一圈主题色涟漪。</summary>
+    InIsland = 0,
+
+    /// <summary>整块屏幕放一朵 maimai 烟花。</summary>
+    Hanabi = 1
+}
+
 /// <summary>
 /// 摄像头安全指示器组件的显示设置（跟随组件实例保存，可多维一份、各自不同颜色）。
 /// </summary>
@@ -48,6 +58,10 @@ public partial class CameraIndicatorSettings : ObservableObject
     /// <summary>指示点亮起时，在岛上从指示点扩散一次涟漪。</summary>
     [ObservableProperty]
     private bool _rippleEnabled = true;
+
+    /// <summary>涟漪样式：岛内涟漪 / 全屏花火。</summary>
+    [ObservableProperty]
+    private RippleStyle _rippleStyle = RippleStyle.InIsland;
 
     /// <summary>涟漪时长（毫秒）。</summary>
     [ObservableProperty]

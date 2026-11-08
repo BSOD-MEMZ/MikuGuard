@@ -11,6 +11,7 @@ using ClassIsland.Core.Attributes;
 using ClassIsland.Shared;
 using MikuGuard.Models;
 using MikuGuard.Services;
+using MikuGuard.Services.Hanabi;
 
 namespace MikuGuard.Views.Components;
 
@@ -223,7 +224,11 @@ public partial class CameraIndicatorComponent : ComponentBase<CameraIndicatorSet
         var hold = Settings.ExpandHoldMs;
         if (hold > 0 && Settings.RippleEnabled)
         {
-            var minHold = (int)(ExpandTransitionMs + RippleDelayMs + Settings.RippleDurationMs + 80);
+            // 花火是整屏的，撑得比岛内涟漪久；按样式决定最少要撑多久
+            var effectMs = Settings.RippleStyle == RippleStyle.Hanabi
+                ? 1750
+                : Settings.RippleDurationMs;
+            var minHold = (int)(ExpandTransitionMs + RippleDelayMs + effectMs + 80);
             if (hold < minHold) hold = minHold;
         }
 
@@ -270,6 +275,13 @@ public partial class CameraIndicatorComponent : ComponentBase<CameraIndicatorSet
         }
 
         var center = new Avalonia.Point(Bounds.Width / 2, Bounds.Height / 2);
+
+        if (Settings.RippleStyle == RippleStyle.Hanabi)
+        {
+            HanabiOverlay.Play(this, center);
+            return;
+        }
+
         IslandRippleHost.Play(this, center, Settings.RippleDurationMs, Settings.RippleStrength);
     }
 

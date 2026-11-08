@@ -38,11 +38,27 @@ public partial class CameraIndicatorSettingsControl : ComponentBase<CameraIndica
     {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IconBrush)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(GlyphPreview)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(RippleStyleIndex)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsIslandRipple)));
     }
 
     public IBrush IconBrush => new SolidColorBrush(Settings?.IconColor ?? Colors.White);
 
     public string GlyphPreview => Settings?.IconGlyph ?? "";
 
+    /// <summary>涟漪样式下拉框索引。</summary>
+    public int RippleStyleIndex
+    {
+        get => Settings == null ? 0 : (int)Settings.RippleStyle;
+        set
+        {
+            if (Settings == null || !Enum.IsDefined(typeof(RippleStyle), value)) return;
+            if ((int)Settings.RippleStyle == value) return;
+            Settings.RippleStyle = (RippleStyle)value;
+            RaiseVisualProps();
+        }
+    }
 
+    /// <summary>只有岛内涟漪才用得上时长和强度。</summary>
+    public bool IsIslandRipple => Settings == null || Settings.RippleStyle == RippleStyle.InIsland;
 }

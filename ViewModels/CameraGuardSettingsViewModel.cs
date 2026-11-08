@@ -48,6 +48,8 @@ public partial class CameraGuardSettingsViewModel : ObservableObject
         ReloadDevices();
         RefreshDetected();
 
+        Settings.Filter.Entries.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasNoFilterEntries));
+
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
         _timer.Tick += (_, _) => RefreshDetected();
         _timer.Start();
@@ -129,6 +131,9 @@ public partial class CameraGuardSettingsViewModel : ObservableObject
 
     /// <summary>「当前没有程序在使用摄像头」提示只在列表为空时显示。</summary>
     public bool HasNoDetectedApps => DetectedApps.Count == 0;
+
+    /// <summary>名单为空时显示占位提示。</summary>
+    public bool HasNoFilterEntries => Settings.Filter.Entries.Count == 0;
 
     private void RefreshDetected()
     {

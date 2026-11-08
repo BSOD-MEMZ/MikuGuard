@@ -7,6 +7,7 @@ using ClassIsland.Shared;
 using ClassIsland.Shared.Helpers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using MikuGuard.Automation;
 using MikuGuard.Models;
 using MikuGuard.Services;
 using MikuGuard.Views.Components;
@@ -46,6 +47,9 @@ public class Plugin : PluginBase
 
         // 设置窗口页面
         services.AddSettingsPage<CameraGuardSettingsPage>();
+
+        // 自动化行动（启用/停用守护、开关提醒、切提醒方式、即时操作）
+        MikuGuardAutomation.Register(services);
 
         AppBase.Current.AppStarted += OnAppStarted;
 
