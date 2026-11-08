@@ -17,6 +17,7 @@ internal sealed class IslandRipple : Control
     private readonly double _maxRadius;
     private readonly Point _center;
     private readonly Color _color;
+    private readonly Rect _clipRect;
     private readonly double _cornerRadius;
     private DispatcherTimer? _timer;
 
@@ -26,13 +27,14 @@ internal sealed class IslandRipple : Control
     public event Action<IslandRipple>? Completed;
 
     public IslandRipple(Point center, double maxRadius, Color color, double durationMs, double strength,
-        double cornerRadius)
+        Rect clipRect, double cornerRadius)
     {
         _center = center;
         _maxRadius = Math.Max(maxRadius, 1);
         _color = color;
         _durationMs = Math.Clamp(durationMs, 100, 5000);
         _strength = Math.Clamp(strength, 0.02, 0.9);
+        _clipRect = clipRect;
         _cornerRadius = Math.Max(0, cornerRadius);
 
         IsHitTestVisible = false;
@@ -85,8 +87,8 @@ internal sealed class IslandRipple : Control
 
         var brush = new SolidColorBrush(_color, alpha);
 
-        var bounds = new Rect(Bounds.Size);
-        using var clip = context.PushClip(new RoundedRect(bounds, _cornerRadius));
+        // 裁剪到岛的渲染矩形（叠加层铺满窗口，本地坐标 == WindowRoot 坐标）
+        using var clip = context.PushClip(new RoundedRect(_clipRect, _cornerRadius));
 
         context.DrawEllipse(brush, null, _center, radius, radius);
     }

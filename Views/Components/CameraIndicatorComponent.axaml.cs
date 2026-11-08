@@ -226,7 +226,11 @@ public partial class CameraIndicatorComponent : ComponentBase<CameraIndicatorSet
     /// <summary>从指示点向整个岛扩散一次 MD3 涟漪。</summary>
     private void PlayRipple()
     {
-        if (Settings == null || !Settings.RippleEnabled) return;
+        if (Settings == null || !Settings.RippleEnabled)
+        {
+            GuardLog.Info($"[ripple] 未播放：Settings={Settings != null}, RippleEnabled={Settings?.RippleEnabled}");
+            return;
+        }
 
         var center = new Avalonia.Point(Bounds.Width / 2, Bounds.Height / 2);
         IslandRippleHost.Play(this, center, Settings.RippleDurationMs, Settings.RippleStrength);
