@@ -57,7 +57,7 @@ public class Plugin : PluginBase
         try
         {
             var service = IAppHost.TryGetService<CameraGuardService>();
-            var icon = Path.Combine(AppContext.BaseDirectory, "icon.png");
+            var icon = MikuGuardPaths.Resolve("icon.png");
             service?.Start(File.Exists(icon) ? icon : null);
         }
         catch (Exception ex)

@@ -266,49 +266,12 @@ public sealed class CameraGuardService : ObservableObject, IDisposable
                 GuardLog.Info("[guard] 用户消除了提醒（本次使用期间不再打扰）");
                 break;
 
-            case "disablecamera":
-                ThreadPool.QueueUserWorkItem(_ => DisableCamera(query));
-                break;
-
             case "killapp":
                 ThreadPool.QueueUserWorkItem(_ => KillApp(query));
                 break;
         }
     }
 
-    private void DisableCamera(Dictionary<string, string> query)
-    {
-        var inst = query.GetValueOrDefault("inst", "");
-        var devId = query.GetValueOrDefault("dev", _settings.Monitor.DeviceId);
-        var name = Devices.FirstOrDefault(d => string.Equals(d.Id, devId, StringComparison.OrdinalIgnoreCase))?.Name
-                   ?? _settings.Monitor.DeviceName;
-
-        if (string.IsNullOrEmpty(inst))
-        {
-            ReportResult("关闭摄像头失败", "没有拿到设备实例 ID，无法禁用");
-            return;
-        }
-
-        var (ok, message) = CameraDeviceService.SetEnabled(inst, false);
-        GuardLog.Info($"[guard] 关闭摄像头 {name}: {ok} {message}");
-
-        if (ok)
-        {
-            ReportResult("摄像头已关闭", $"「{name}」已禁用，需要时可在 MikuGuard 设置页重新启用");
-            RefreshDevices();
-            return;
-        }
-
-        // 没权限禁用设备时，退而求其次：撤销正在用的那个程序的摄像头权限
-        var app = DetectedApps.FirstOrDefault();
-        if (app != null && CameraConsentReader.SetConsent(app, false))
-        {
-            ReportResult("已撤销摄像头权限", $"{message}；已改为禁止 {app.DisplayName} 访问摄像头");
-            return;
-        }
-
-        ReportResult("关闭摄像头失败", message);
-    }
 
     private void KillApp(Dictionary<string, string> query)
     {

@@ -57,6 +57,15 @@ public static class IslandRippleHost
                 return;
             }
 
+            // BackgroundBorder 外圈还有 ClassIsland 的固定内边距（内容 Margin="12 0"），
+            // 裁剪矩形左右往外扩一圈，不然两侧会留细边。缩放系数用渲染高/布局高推。
+            if (island.Name == "BackgroundBorder" && island.Bounds.Height > 1)
+            {
+                var scale = rect.Height / island.Bounds.Height;
+                var pad = 10 * scale;
+                rect = new Rect(rect.Left - pad, rect.Top, rect.Width + pad * 2, rect.Height);
+            }
+
             var center = new Point(
                 Math.Clamp(dotInRoot.X, rect.X, rect.Right),
                 Math.Clamp(dotInRoot.Y, rect.Y, rect.Bottom));

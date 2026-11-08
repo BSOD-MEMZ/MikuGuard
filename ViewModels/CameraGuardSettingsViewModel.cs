@@ -127,6 +127,9 @@ public partial class CameraGuardSettingsViewModel : ObservableObject
 
     // ================= 状态刷新 =================
 
+    /// <summary>「当前没有程序在使用摄像头」提示只在列表为空时显示。</summary>
+    public bool HasNoDetectedApps => DetectedApps.Count == 0;
+
     private void RefreshDetected()
     {
         if (_service == null)
@@ -145,6 +148,7 @@ public partial class CameraGuardSettingsViewModel : ObservableObject
         {
             DetectedApps.Clear();
             foreach (var app in current) DetectedApps.Add(app);
+            OnPropertyChanged(nameof(HasNoDetectedApps));
         }
 
         var alert = _service.AlertService;
@@ -221,20 +225,6 @@ public partial class CameraGuardSettingsViewModel : ObservableObject
         RefreshDetected();
     }
 
-    [RelayCommand]
-    private void RestoreCamera()
-    {
-        var device = SelectedDevice;
-        if (device == null || string.IsNullOrEmpty(device.InstanceId))
-        {
-            LastActionText = "没有选中具体摄像头，无法恢复设备";
-            return;
-        }
-
-        var (ok, message) = CameraDeviceService.SetEnabled(device.InstanceId, true);
-        LastActionText = ok ? $"「{device.Name}」{message}" : $"{message}（需要管理员权限）";
-        RefreshDevices();
-    }
 
     [RelayCommand]
     private void RestartMonitor()
@@ -245,7 +235,7 @@ public partial class CameraGuardSettingsViewModel : ObservableObject
 
     private static string? IconPath()
     {
-        var candidate = Path.Combine(AppContext.BaseDirectory, "icon.png");
+        var candidate = MikuGuardPaths.Resolve("icon.png");
         return File.Exists(candidate) ? candidate : null;
     }
 }

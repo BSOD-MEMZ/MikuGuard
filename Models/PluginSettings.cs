@@ -90,9 +90,6 @@ public partial class AlertSettings : ObservableObject
     private bool _showDismissAction = true;
 
     [ObservableProperty]
-    private bool _showDisableCameraAction = true;
-
-    [ObservableProperty]
     private bool _showCloseAppAction = true;
 
     /// <summary>执行动作后，用一条通知回执告诉用户结果。</summary>

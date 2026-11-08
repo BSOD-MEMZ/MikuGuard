@@ -85,6 +85,9 @@ public sealed class WindowsToastPresenter
 
             _notifier!.Show(toast);
             LastError = "";
+            GuardLog.Info(image.Length > 0
+                ? $"[toast] 已发送（含配图 {imagePath}）"
+                : "[toast] 已发送（无配图）");
             return true;
         }
         catch (Exception ex)
@@ -102,7 +105,7 @@ public sealed class WindowsToastPresenter
         {
             if (string.IsNullOrWhiteSpace(imagePath) || !File.Exists(imagePath)) return "";
             var uri = new Uri(Path.GetFullPath(imagePath)).AbsoluteUri;
-            return $"<image placement=\"hero\" src=\"{SecurityElement.Escape(uri)}\" hint-crop=\"none\"/>";
+            return $"<image placement=\"hero\" src=\"{SecurityElement.Escape(uri)}\"/>";
         }
         catch (Exception ex)
         {

@@ -176,6 +176,19 @@ public static class CameraConsentReader
 
     private static string PackageDisplayName(string familyName)
     {
+        // 包族名对用户没意义（比如 Microsoft.WindowsCamera_8wekyb3d8bbwe），
+        // 查一下包的显示名（"Windows 相机"），查不到再退回包名。
+        try
+        {
+            var pkg = new Windows.Management.Deployment.PackageManager().FindPackage(familyName);
+            if (pkg != null && !string.IsNullOrWhiteSpace(pkg.DisplayName))
+                return pkg.DisplayName;
+        }
+        catch
+        {
+            // 查不到就算了
+        }
+
         var bang = familyName.IndexOf('_');
         return bang > 0 ? familyName[..bang] : familyName;
     }

@@ -79,7 +79,10 @@ internal sealed class IslandRipple : Control
         var t = Elapsed();
         if (t >= 1) return;
 
-        var radius = _maxRadius * Md3Easing.FastOutSlowIn(t);
+        // 前 70% 时间就铺满全岛：半径按 MD3 曲线走到头后再保持，
+        // 不然最远的左右边缘要等到 t=1（不透明度已经衰没）才被涂到，看起来就是两边留了细边。
+        const double coverageRatio = 0.7;
+        var radius = _maxRadius * Md3Easing.FastOutSlowIn(Math.Clamp(t / coverageRatio, 0, 1));
         if (radius <= 0.5) return;
 
         var alpha = _strength * FadeIn(t) * FadeOut(t);

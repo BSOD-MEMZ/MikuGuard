@@ -122,14 +122,14 @@ public sealed class CameraAlertService
     /// <summary>解析配图路径：相对路径按插件目录算，文件不存在就当没有。</summary>
     private string? ResolveImagePath()
     {
-        var configured = _settings.Alert.ImagePath;
-        if (string.IsNullOrWhiteSpace(configured)) return null;
-
         try
         {
-            var full = Path.IsPathRooted(configured)
-                ? configured
-                : Path.Combine(AppContext.BaseDirectory, configured.Replace('/', Path.DirectorySeparatorChar));
+            var full = MikuGuardPaths.Resolve(_settings.Alert.ImagePath);
+            if (full.Length == 0) return null;
+
+            if (!File.Exists(full))
+                GuardLog.Warn($"[alert] 配图不存在：{full}");
+
             return File.Exists(full) ? full : null;
         }
         catch
@@ -157,10 +157,6 @@ public sealed class CameraAlertService
 
         if (cfg.ShowDismissAction)
             list.Add(new ToastActionButton("消除提醒", "action=dismiss"));
-
-        if (cfg.ShowDisableCameraAction && !string.IsNullOrEmpty(alert.DeviceInstanceId))
-            list.Add(new ToastActionButton("关闭摄像头",
-                $"action=disablecamera&inst={Uri.EscapeDataString(alert.DeviceInstanceId)}&dev={Uri.EscapeDataString(alert.DeviceId)}"));
 
         if (cfg.ShowCloseAppAction && !string.IsNullOrEmpty(alert.AppKey))
             list.Add(new ToastActionButton("关闭应用",
