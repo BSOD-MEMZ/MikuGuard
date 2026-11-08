@@ -29,7 +29,14 @@ public partial class CameraIndicatorComponent : ComponentBase<CameraIndicatorSet
     private DispatcherTimer? _pulseTimer;
     private DispatcherTimer? _hideTimer;
     private DispatcherTimer? _settingsRetry;
+    private DispatcherTimer? _rippleDelayTimer;
     private bool _applied;
+
+    /// <summary>展开/收缩的过渡动画时长（毫秒）。</summary>
+    private const double ExpandTransitionMs = 220;
+
+    /// <summary>展开动画结束后再多等一点，让岛布局彻底稳定下来才量岛。</summary>
+    private const double RippleDelayMs = 80;
 
     public CameraIndicatorComponent()
     {
@@ -90,6 +97,7 @@ public partial class CameraIndicatorComponent : ComponentBase<CameraIndicatorSet
         _pulseTimer?.Stop();
         _hideTimer?.Stop();
         _settingsRetry?.Stop();
+        _rippleDelayTimer?.Stop();
     }
 
     /// <summary>宿主注入设置的时机不完全确定，拿不到就短轮询几次。</summary>
@@ -209,11 +217,19 @@ public partial class CameraIndicatorComponent : ComponentBase<CameraIndicatorSet
         Icon.IsVisible = !string.IsNullOrEmpty(Settings.IconGlyph);
 
         StartPulse();
-        PlayRipple();
+        ScheduleRipple();
 
-        if (Settings.ExpandHoldMs > 0)
+        // 涟漪要在收缩前播完：必须等「展开动画 + 涟漪时长」都结束才允许收缩
+        var hold = Settings.ExpandHoldMs;
+        if (hold > 0 && Settings.RippleEnabled)
         {
-            _collapseTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(Settings.ExpandHoldMs) };
+            var minHold = (int)(ExpandTransitionMs + RippleDelayMs + Settings.RippleDurationMs + 80);
+            if (hold < minHold) hold = minHold;
+        }
+
+        if (hold > 0)
+        {
+            _collapseTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(hold) };
             _collapseTimer.Tick += (_, _) =>
             {
                 _collapseTimer?.Stop();
@@ -221,6 +237,27 @@ public partial class CameraIndicatorComponent : ComponentBase<CameraIndicatorSet
             };
             _collapseTimer.Start();
         }
+    }
+
+    /// <summary>
+    /// 展开动画（220ms）会瞬间撑宽岛，立刻量岛量到的是变宽前的旧布局。
+    /// 等展开完全展开后再量岛、再播涟漪。
+    /// </summary>
+    private void ScheduleRipple()
+    {
+        _rippleDelayTimer?.Stop();
+        _rippleDelayTimer = null;
+
+        if (Settings == null || !Settings.RippleEnabled) return;
+
+        _rippleDelayTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ExpandTransitionMs + RippleDelayMs) };
+        _rippleDelayTimer.Tick += (_, _) =>
+        {
+            _rippleDelayTimer?.Stop();
+            _rippleDelayTimer = null;
+            PlayRipple();
+        };
+        _rippleDelayTimer.Start();
     }
 
     /// <summary>从指示点向整个岛扩散一次 MD3 涟漪。</summary>
