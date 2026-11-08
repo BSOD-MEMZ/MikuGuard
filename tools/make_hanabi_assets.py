@@ -1,8 +1,9 @@
 """从原版 maimai 贴图生成「着色用的遮罩 / 预先乘好的圆环」。
 
-原实现是 D3D shader：rgb = tex1.rgb * tex2.rgb * tint，alpha = tex.a * tint.a，
-再走 screen / additive 混合。Avalonia 没有逐次绘制的混合模式，所以这里把
-「亮度 → alpha」这一步预烘焙成遮罩，运行时只做「遮罩 + 纯色填充」着色。
+原实现是 D3D 的 SpritePixel：rgb = tex1.rgb * tex2.rgb * exp2(exposure) * tint.rgb，
+alpha = tex.a * tint.a，再按材质走 alpha / additive / screen 混合。
+Avalonia 这边没法在 shader 里逐次算，所以把「两张贴图相乘 + 曝光」预烘焙成一张图；
+运行时只用 paint 的颜色矩阵乘 tint、用 paint 的 alpha 乘 tint.a。
 
 输入（原样保留，版权见 ASSET-LICENSE.txt）：
   maimai_1519.png  白 + 渐变 alpha  → 星光
@@ -10,8 +11,8 @@
   maimai_3691.png  不透明灰度      → 圆环形状
   maimai_4862.png  不透明彩色      → 圆环颜色
 输出：
-  mask_1519.png / mask_2694.png  白色 + alpha=原亮度
-  ring_4862.png                  rgb 取 4862，alpha = 3691 亮度 × 4862 亮度
+  mask_1519.png / mask_2694.png  白色 + alpha=原亮度（这两张就靠亮度当形状，见 SpritePixel）
+  ring_4862.png                  rgb = 3691×4862×exp2(2.3)，alpha 恒为 255（不透明的加法图）
 """
 from PIL import Image
 
@@ -42,15 +43,18 @@ def white_mask(name):
 
 
 def bake_ring():
-    """圆环 = 3691(形状) × 4862(颜色)。
+    """圆环 = 3691(形状/亮度) × 4862(色轮)，按 SpritePixel 的公式原样算。
 
-    原 shader 是 rgb = tex1.rgb * tex2.rgb，走加法混合；所以最终亮度是**逐通道相乘**。
-    这里把颜色归一化到最亮通道（保住色相），亮度写在 alpha 里：
-        alpha = luma(3691) × max(4862.rgb) / 255
-        rgb   = 4862.rgb 按 max 放大到满
-    这样 alpha 合成后得到的就是 rgb*alpha = 3691 × 4862，和原实现一致。
-    注意别用「4862 的亮度」去算 alpha——彩色像素的亮度很低（紫色 (182,0,236) 亮度才 55），
-    那样圆环会暗到几乎看不见。
+    原 shader（material 50 走 spritePS）:
+        rgb   = tex0.rgb * tex1.rgb * exp2(exposure) * tint.rgb      // 两张都是不透明贴图
+        a     = tex0.a * tint.a = tint.a                            // tex0.a 实测 254~255
+        out   = float4(rgb * a, ...)，混合状态是 ONE / ONE（加法）
+    exposure 对两个圆环都是 2.3，所以 exp2 = 4.9246，乘完在 8bit 中间缓冲里就夹到 1 了
+    ——这也是官方截图里那圈圆环偏白、不饱和的原因。
+
+    所以这里**不再把亮度挪进 alpha**（之前那样做色相永远满饱和，渲染出来是个彩色盘子）：
+        rgb   = clamp(3691.rgb/255 * 4862.rgb/255 * 4.9246) * 255
+        alpha = 255（由运行时的 tint.a 单独乘）
     """
     shape = Image.open(f"{BASE}/maimai_3691.png").convert("RGBA").load()
     color = Image.open(f"{BASE}/maimai_4862.png").convert("RGBA")
@@ -58,23 +62,19 @@ def bake_ring():
     c = color.load()
     out = Image.new("RGBA", (w, h))
     d = out.load()
+    gain = 2.0 ** 2.3
     for y in range(h):
         for x in range(w):
             r, g, b, _ = c[x, y]
-            mx = max(r, g, b)
-            m = luminance_px(shape[x, y])
-            if mx == 0 or m == 0:
-                d[x, y] = (0, 0, 0, 0)
-                continue
-            alpha = (m * mx) // 255
+            sr, sg, sb, _ = shape[x, y]
             d[x, y] = (
-                min(255, r * 255 // mx),
-                min(255, g * 255 // mx),
-                min(255, b * 255 // mx),
-                alpha,
+                min(255, int(r * sr / 255 * gain)),
+                min(255, int(g * sg / 255 * gain)),
+                min(255, int(b * sb / 255 * gain)),
+                255,
             )
     out.save(f"{BASE}/ring_4862.png", "PNG")
-    print("bake maimai_3691 x maimai_4862 -> ring_4862.png")
+    print("bake maimai_3691 x maimai_4862 (x exp2(2.3), alpha=255) -> ring_4862.png")
 
 
 white_mask("maimai_1519.png")

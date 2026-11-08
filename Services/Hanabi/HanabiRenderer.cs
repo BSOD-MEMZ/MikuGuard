@@ -218,6 +218,7 @@ internal sealed class HanabiPainter : ICustomDrawOperation
 {
     private static readonly Dictionary<string, SKImage?> Textures = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<uint, SKColorFilter> Filters = new();
+    private static readonly Dictionary<(uint, float), SKColorFilter> ScaledFilters = new();
 
     // 扇形的硬边界渐变：调色板绕一圈重复 RainbowCycles 次，色块之间不留过渡
     private static readonly SKColor[] SectorColors;
@@ -318,17 +319,18 @@ internal sealed class HanabiPainter : ICustomDrawOperation
 
                     if (emitter.Material == 50)
                     {
-                        // 圆环是加法混合：越叠越亮
+                        // 圆环是加法混合：越叠越亮。exp2(exposure) 已经烘进 ring_4862.png，
+                        // tint 是白的，所以这里不用再挂颜色滤镜
                         paint.BlendMode = SKBlendMode.Plus;
                     }
                     else
                     {
                         // 星光 / 放射是 screen：黑底不会压暗背景
                         paint.BlendMode = SKBlendMode.Screen;
-                        // 放射光芒（material 80）也是按粒子颜色染的（红→黄绿的随机插值），
-                        // 之前这里写死成白色，尖刺就全白了
-                        paint.ColorFilter = Tint(new SKColor(
-                            (byte)(sample.R * 255), (byte)(sample.G * 255), (byte)(sample.B * 255)));
+                        // rgb = 贴图 × tint × 2^exposure（原版 SpritePixel 里曝光就乘在这一步）
+                        paint.ColorFilter = TintScaled(
+                            new SKColor((byte)(sample.R * 255), (byte)(sample.G * 255), (byte)(sample.B * 255)),
+                            MathF.Pow(2f, (float)emitter.Exposure));
                     }
 
                     canvas.Save();
@@ -375,7 +377,7 @@ internal sealed class HanabiPainter : ICustomDrawOperation
     };
 
     /// <summary>位图边长上限。彩虹层是纯几何图形，铺满到屏幕时用不着 1:1。</summary>
-    private const int RainbowBitmapCap = 720;
+    private const int RainbowBitmapCap = 1024;
 
     private static SKBitmap? _rainbowBitmap;
 
@@ -481,15 +483,21 @@ internal sealed class HanabiPainter : ICustomDrawOperation
                         : rc <= 0.82f ? (rc - 0.8f) * -25f + 1f
                         : (rc - 0.82f) * -2.7777777f + 0.5f;
 
-                    var dqx = (u - 0.5f) * quad;
-                    var sxp = cx + cos * dqx - sin * dyq;
-                    var syp = cy + sin * dqx + cos * dyq;
-                    var gx = Frac((sxp / sw * 2f - 1f) * 64f) - 0.5f;
-                    var gy = Frac(((1f - syp / sh) * 2f - 1f) * 64f) - 0.5f;
-                    var dot = 1f - MathF.Sqrt(gx * gx + gy * gy);
-                    var dots = dot * dot;
+                    // mask = 1 - clamp((dots*band - 0.1)*24 + 0.1)，band 太小时这个式子恒为 0
+                    // （dots<=1 时 dots*band-0.1 < 0 就够），那种像素不用算网点
+                    var mask = 1f;
+                    if (!isSector && band > 0.1375f)
+                    {
+                        var dqx = (u - 0.5f) * quad;
+                        var sxp = cx + cos * dqx - sin * dyq;
+                        var syp = cy + sin * dqx + cos * dyq;
+                        var gx = Frac((sxp / sw * 2f - 1f) * 64f) - 0.5f;
+                        var gy = Frac(((1f - syp / sh) * 2f - 1f) * 64f) - 0.5f;
+                        var dot = 1f - MathF.Sqrt(gx * gx + gy * gy);
+                        var dots = dot * dot;
+                        mask = 1f - Math.Clamp((dots * band - 0.1f) * 24f + 0.1f, 0f, 1f);
+                    }
 
-                    var mask = 1f - Math.Clamp((dots * band - 0.1f) * 24f + 0.1f, 0f, 1f);
                     var sector = isSector ? 1f : mask;
 
                     // k 是灰度斜坡：中心亮、径向 0.25 处最暗、到边缘又亮
@@ -539,6 +547,27 @@ internal sealed class HanabiPainter : ICustomDrawOperation
         canvas.Restore();
     }
 
+    /// <summary>rgb = 贴图 × tint × 2^exposure，对应 SpritePixel 里 rgb 那一行。</summary>
+    private static SKColorFilter TintScaled(SKColor color, float gain)
+    {
+        if (MathF.Abs(gain - 1f) < 0.001f) return Tint(color);
+
+        var key = ((uint)color, gain);
+        if (ScaledFilters.TryGetValue(key, out var cached)) return cached;
+
+        var scale = SKColorFilter.CreateColorMatrix(new[]
+        {
+            gain, 0, 0, 0, 0,
+            0, gain, 0, 0, 0,
+            0, 0, gain, 0, 0,
+            0, 0, 0, 1, 0
+        });
+        // CreateCompose 会持有这两个滤镜，不能提前 Dispose
+        var composed = SKColorFilter.CreateCompose(scale, Tint(color));
+        ScaledFilters[key] = composed;
+        return composed;
+    }
+
     /// <summary>用一个颜色去乘贴图（等价于 shader 里的 rgb *= tint）。</summary>
     private static SKColorFilter Tint(SKColor color)
     {
@@ -583,5 +612,7 @@ internal sealed class HanabiPainter : ICustomDrawOperation
         Textures.Clear();
         foreach (var filter in Filters.Values) filter.Dispose();
         Filters.Clear();
+        foreach (var filter in ScaledFilters.Values) filter.Dispose();
+        ScaledFilters.Clear();
     }
 }

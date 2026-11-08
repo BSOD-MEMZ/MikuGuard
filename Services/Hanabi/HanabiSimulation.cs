@@ -296,11 +296,10 @@ public sealed class HanabiSimulation
             for (var c = 0; c < 4; c++) color[c] = low[c] + (color[c] - low[c]) * particle.Random;
         }
 
-        // exposure 是 2 的指数（shader 里 exp2(frame.w)），原实现乘在 rgb 上。
-        // 这里没有 HDR，交给渲染层折进 alpha，颜色保持色相。
-        // 注意：彩虹光环（material 49）有自己的 pixel shader，**根本不用 frame.w**，
-        // 所以它的曝光必须当 1 处理——否则 alpha 会被顶满，把放射光芒盖掉。
-        var gain = emitter.Material == 49 ? 1.0 : Math.Pow(2, emitter.Exposure);
+        // 注意：原版的 SpritePixel 是 rgb *= exp2(exposure) * tint.rgb、a = tex.a * tint.a，
+        // **曝光只作用在 rgb 上，从不乘 alpha**。之前我把曝光折进了 alpha：
+        // 圆环的 tint.a 本来只有 0.22，被乘成 1，整圈圆盘亮了十倍。
+        // 曝光改由渲染层用颜色矩阵乘到 rgb 上（圆环的那份已经烘进贴图）。
 
         sample = new HanabiSample
         {
@@ -310,7 +309,7 @@ public sealed class HanabiSimulation
             R = Math.Clamp(color[0], 0, 1),
             G = Math.Clamp(color[1], 0, 1),
             B = Math.Clamp(color[2], 0, 1),
-            A = Math.Clamp(color[3] * gain, 0, 1)
+            A = Math.Clamp(color[3], 0, 1)
         };
 
         return true;
