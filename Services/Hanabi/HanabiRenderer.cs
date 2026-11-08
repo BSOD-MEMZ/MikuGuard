@@ -390,16 +390,26 @@ internal sealed class HanabiPainter : ICustomDrawOperation
         return tile;
     }
 
+    /// <summary>往白色里揉一点，得到官方那种淡彩观感。</summary>
+    private static SKColor Pastel(SKColor color, float amount = 0.18f)
+    {
+        byte Mix(byte v) => (byte)(v + (255 - v) * amount);
+        return new SKColor(Mix(color.Red), Mix(color.Green), Mix(color.Blue), color.Alpha);
+    }
+
     /// <summary>按 shader 的分带规则，算出 sweep 渐变（色带会随时间步进平移）。</summary>
     private static SKColor[] BuildSectorColors(double time, out float[] positions)
     {
+        // 按 shader 的阈值链推出来的真实分段：
+        //   step(1.0, y) 恒为 0 → 第二段把颜色覆盖成 cb7(蓝)
+        //   剩下的阈值是 0.2 / 0.4 / 0.6，所以最后那段是双倍宽（0.6~1.0）
+        //   cb5(灰) 和 cb6(粉) 都会被后面覆盖掉，实际不出现——官方图里的粉色是另一层的色轮给的
         var palette = new[]
         {
-            new SKColor(255, 90, 18),     // 橙  y < 0.2
-            new SKColor(255, 216, 0),     // 黄  y < 0.4
-            new SKColor(184, 210, 0),     // 黄绿 y < 0.6
-            new SKColor(0, 160, 233),     // 蓝  y < 0.8
-            new SKColor(237, 58, 156)     // 粉  其它
+            Pastel(new SKColor(255, 90, 18)),    // 橙   y < 0.2
+            Pastel(new SKColor(255, 216, 0)),    // 黄   y < 0.4
+            Pastel(new SKColor(184, 210, 0)),    // 黄绿 y < 0.6
+            Pastel(new SKColor(0, 160, 233))     // 蓝   y < 1.0（双宽）
         };
 
         // shader：y = fract(角度×3/(2π) + offset)，offset = floor(9t)/5
@@ -416,7 +426,7 @@ internal sealed class HanabiPainter : ICustomDrawOperation
             var u = (float)i / steps;                 // sweep 参数 0..1
             var y = u * cycles + offset;
             y -= (float)Math.Floor(y);
-            var band = y < 0.2f ? 0 : y < 0.4f ? 1 : y < 0.6f ? 2 : y < 0.8f ? 3 : 4;
+            var band = y < 0.2f ? 0 : y < 0.4f ? 1 : y < 0.6f ? 2 : 3;
             if (band == last) continue;
 
             // 色块之间是硬边界：在上一个颜色收尾的位置再插一个平移后的新颜色
@@ -447,7 +457,7 @@ internal sealed class HanabiPainter : ICustomDrawOperation
 
         var colors = BuildSectorColors(_now, out var positions);
 
-        var save = canvas.SaveLayer();
+        var outer = canvas.SaveLayer();
         canvas.Translate(x, y);
         canvas.RotateDegrees((float)(sample.Rotation * 180 / Math.PI));
 
@@ -458,33 +468,35 @@ internal sealed class HanabiPainter : ICustomDrawOperation
             canvas.ClipPath(clip, SKClipOperation.Intersect, true);
         }
 
-        // 1) 色带
-        using (var sweep = SKShader.CreateSweepGradient(SKPoint.Empty, colors, positions, SKMatrix.Identity))
-        using (var sectorPaint = new SKPaint
-               {
-                   IsAntialias = true,
-                   Style = SKPaintStyle.Fill,
-                   Shader = sweep,
-                   BlendMode = SKBlendMode.SrcOver,
-                   Color = SKColors.White.WithAlpha((byte)(alpha * 255))
-               })
+        // 1) 色带：只把这一层做模糊（官方的楔形边缘是柔的），网点要留清晰，所以分开两层
+        var blur = Math.Max(1.2f, radius * 0.008f);
+        using (var layerPaint = new SKPaint { ImageFilter = SKImageFilter.CreateBlur(blur, blur) })
         {
-            canvas.DrawCircle(0, 0, radius, sectorPaint);
+            var inner = canvas.SaveLayer(layerPaint);
+            using var sweep = SKShader.CreateSweepGradient(SKPoint.Empty, colors, positions, SKMatrix.Identity);
+            using var sectorPaint = new SKPaint
+            {
+                IsAntialias = true,
+                Style = SKPaintStyle.Fill,
+                Shader = sweep,
+                BlendMode = SKBlendMode.SrcOver,
+                Color = SKColors.White.WithAlpha((byte)(alpha * 255))
+            };
+            canvas.DrawRect(new SKRect(-radius, -radius, radius, radius), sectorPaint);
+            canvas.RestoreToCount(inner);
         }
 
-        // 2) 网点（屏幕空间 128 格）
+        // 2) 网点（屏幕空间 128 格），只提亮不挖洞
         var cell = (float)(_size.Width / 128.0);
         using (var dot = SKShader.CreateBitmap(DotTile(), SKShaderTileMode.Repeat, SKShaderTileMode.Repeat,
                    SKMatrix.CreateScale(cell / 32f, cell / 32f)))
-        using (var dotPaint = new SKPaint { Shader = dot, BlendMode = SKBlendMode.SrcOver })
+        using (var dotPaint = new SKPaint
+               {
+                   Shader = dot,
+                   BlendMode = SKBlendMode.Plus,
+                   Color = SKColors.White.WithAlpha((byte)(0.30 * 255))
+               })
         {
-            using (var layer = new SKPaint { Color = SKColors.White.WithAlpha((byte)(0.30 * 255)) })
-            {
-                // 网点只提亮，不挖洞（shader 里它只调制亮度）
-                dotPaint.Color = layer.Color;
-            }
-
-            dotPaint.BlendMode = SKBlendMode.Plus;
             canvas.DrawRect(new SKRect(-radius, -radius, radius, radius), dotPaint);
         }
 
@@ -497,7 +509,7 @@ internal sealed class HanabiPainter : ICustomDrawOperation
             canvas.DrawRect(new SKRect(-radius, -radius, radius, radius), fadePaint);
         }
 
-        canvas.RestoreToCount(save);
+        canvas.RestoreToCount(outer);
     }
 
     /// <summary>用一个颜色去乘贴图（等价于 shader 里的 rgb *= tint）。</summary>
