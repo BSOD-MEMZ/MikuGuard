@@ -176,7 +176,10 @@ public sealed class HanabiSimulation
     /// <summary>一次开花最长活这么久（秒），和原实现一致。</summary>
     public const double BurstLifetime = 1.75;
 
-    private readonly Random _random = new();
+    private readonly Random _random;
+
+    /// <summary>传 seed 可以复现同一朵花（离线探针用）。</summary>
+    public HanabiSimulation(int? seed = null) => _random = seed.HasValue ? new Random(seed.Value) : new Random();
 
     public List<HanabiEmitter> Emitters { get; } = new();
 
@@ -293,7 +296,9 @@ public sealed class HanabiSimulation
             for (var c = 0; c < 4; c++) color[c] = low[c] + (color[c] - low[c]) * particle.Random;
         }
 
-        // exposure 是 2 的指数（shader 里 exp2(frame.w)）
+        // exposure 是 2 的指数（shader 里 exp2(frame.w)）。
+        // 原实现把它乘在 rgb 上、再乘以 tex.a，最终可见亮度 = rgb × 曝光 × 透明度；
+        // 这里没有 HDR，就把曝光折进 alpha（颜色保持色相，不然乘完就全白成一片）。
         var gain = Math.Pow(2, emitter.Exposure);
 
         sample = new HanabiSample
@@ -301,10 +306,10 @@ public sealed class HanabiSimulation
             Distance = distance,
             Diameter = particle.Diameter * Math.Max(0, emitter.SizeCurve.Evaluate(t, particle.Random)) * screenScale,
             Rotation = -particle.Rotation - particle.Spin * age,
-            R = Math.Clamp(color[0] * gain, 0, 1),
-            G = Math.Clamp(color[1] * gain, 0, 1),
-            B = Math.Clamp(color[2] * gain, 0, 1),
-            A = Math.Clamp(color[3], 0, 1)
+            R = Math.Clamp(color[0], 0, 1),
+            G = Math.Clamp(color[1], 0, 1),
+            B = Math.Clamp(color[2], 0, 1),
+            A = Math.Clamp(color[3] * gain, 0, 1)
         };
 
         return true;

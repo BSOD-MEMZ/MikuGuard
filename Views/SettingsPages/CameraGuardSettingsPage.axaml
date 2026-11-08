@@ -85,7 +85,7 @@
                 </fa:SettingsExpander.Footer>
             </fa:SettingsExpander>
 
-            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE8FD;}"
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xF1F6;}"
                                  Header="过滤名单"
                                  Description="可以填完整路径、exe 文件名或 UWP 包族名。"
                                  IsExpanded="True">
@@ -158,7 +158,7 @@
                 </fa:SettingsExpander.Footer>
             </fa:SettingsExpander>
 
-            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE7F4;}"
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xEB70;}"
                                  Header="提醒方式"
                                  Description="「自动」在 Windows 通知发不出去时改用插件内弹窗。">
                 <fa:SettingsExpander.Footer>
@@ -184,7 +184,7 @@
                 </fa:SettingsExpander.Footer>
             </fa:SettingsExpander>
 
-            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE8D2;}"
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xF26F;}"
                                  Header="标题文字"
                                  Description="提醒的标题，留空则使用「摄像头正在被使用」。">
                 <fa:SettingsExpander.Footer>
@@ -212,7 +212,7 @@
                 </fa:SettingsExpander.Footer>
             </fa:SettingsExpander>
 
-            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE7E8;}"
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xEE0F;}"
                                  Header="「关闭应用」按钮"
                                  Description="在提醒里放一个「直接关掉这个程序」的按钮。">
                 <fa:SettingsExpander.Footer>
@@ -220,7 +220,7 @@
                 </fa:SettingsExpander.Footer>
             </fa:SettingsExpander>
 
-            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE8FB;}"
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xEE55;}"
                                  Header="操作结果回执"
                                  Description="点完提醒里的按钮后，再用一条通知告诉你结果。">
                 <fa:SettingsExpander.Footer>

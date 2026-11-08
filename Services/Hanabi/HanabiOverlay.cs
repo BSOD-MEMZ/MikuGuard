@@ -2,8 +2,6 @@ using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
-using Avalonia.Media.Imaging;
-using Avalonia.Platform;
 using Avalonia.Threading;
 
 namespace MikuGuard.Services.Hanabi;
@@ -91,8 +89,6 @@ public sealed class HanabiOverlayWindow : Window
 /// <summary>画烟花的那块画布。</summary>
 internal sealed class HanabiSurface : Control
 {
-    private static readonly Dictionary<string, Bitmap> Masks = new(StringComparer.OrdinalIgnoreCase);
-
     private readonly HanabiSimulation _sim;
     private readonly double _originX;
     private readonly double _originY;
@@ -137,139 +133,7 @@ internal sealed class HanabiSurface : Control
     public override void Render(DrawingContext context)
     {
         base.Render(context);
-
-        if (Bounds.Width < 2 || Bounds.Height < 2 || !_sim.Ready) return;
-
-        var now = Now;
-        var scale = Math.Max(Bounds.Width, Bounds.Height) / 1000.0;
-
-        for (var layer = 0; layer < 3; layer++)
-        {
-            foreach (var burst in _sim.Bursts)
-            {
-                foreach (var particle in burst.Particles)
-                {
-                    var emitter = _sim.Emitters[particle.Emitter];
-                    if (emitter.Layer != layer) continue;
-
-                    if (!HanabiSimulation.Sample(emitter, particle, now, burst.Start, scale, out var sample)) continue;
-                    if (sample.Diameter <= 0.5 || sample.A <= 0.004) continue;
-
-                    var x = Bounds.Width * burst.OriginX + Math.Cos(particle.Angle) * sample.Distance * scale;
-                    var y = Bounds.Height * burst.OriginY - Math.Sin(particle.Angle) * sample.Distance * scale;
-
-                    var color = Color.FromRgb((byte)(sample.R * 255), (byte)(sample.G * 255), (byte)(sample.B * 255));
-
-                    switch (emitter.Material)
-                    {
-                        case 49:
-                            DrawRainbowRing(context, x, y, sample, color);
-                            break;
-
-                        case 50:
-                            DrawSprite(context, MaskFor("ring_4862.png"), x, y, sample, Colors.White, sample.A);
-                            break;
-
-                        default:
-                            var mask = MaskFor(emitter.Textures.Length > 0 ? MaskName(emitter.Textures[0]) : null);
-                            if (mask != null) DrawSprite(context, mask, x, y, sample, color, sample.A);
-                            break;
-                    }
-                }
-            }
-        }
-    }
-
-    /// <summary>贴图光源：遮罩当不透明度，纯色填充 = 原 shader 的 tex * tint。</summary>
-    private static void DrawSprite(DrawingContext context, Bitmap? mask, double x, double y, in HanabiSample sample,
-        Color tint, double alpha)
-    {
-        if (mask == null) return;
-
-        var size = sample.Diameter;
-        var rect = new Rect(x - size / 2, y - size / 2, size, size);
-        var brush = new ImageBrush(mask) { Stretch = Stretch.Fill };
-
-        var matrix = Matrix.CreateTranslation(-x, -y)
-                     * Matrix.CreateRotation(sample.Rotation)
-                     * Matrix.CreateTranslation(x, y);
-
-        using (context.PushTransform(matrix))
-        using (context.PushOpacityMask(brush, rect))
-        {
-            context.FillRectangle(new SolidColorBrush(tint, Math.Clamp(alpha, 0, 1)), rect);
-        }
-    }
-
-    /// <summary>彩虹光环没有贴图，原实现是 shader 里按角度生成色相，这里用锥形渐变近似。</summary>
-    private static void DrawRainbowRing(DrawingContext context, double x, double y, in HanabiSample sample, Color tint)
-    {
-        var radius = sample.Diameter / 2;
-        if (radius < 1) return;
-
-        var brush = new ConicGradientBrush
-        {
-            Center = new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
-            GradientStops =
-            {
-                new GradientStop(Color.FromArgb(255, 255, 0, 0), 0.00),
-                new GradientStop(Color.FromArgb(255, 255, 255, 0), 0.17),
-                new GradientStop(Color.FromArgb(255, 0, 255, 0), 0.33),
-                new GradientStop(Color.FromArgb(255, 0, 255, 255), 0.50),
-                new GradientStop(Color.FromArgb(255, 0, 120, 255), 0.67),
-                new GradientStop(Color.FromArgb(255, 200, 0, 255), 0.83),
-                new GradientStop(Color.FromArgb(255, 255, 0, 0), 1.00)
-            }
-        };
-
-        var pen = new Pen(brush, Math.Max(2, radius * 0.16));
-        using (context.PushOpacity(Math.Clamp(sample.A, 0, 1)))
-        {
-            context.DrawEllipse(null, pen, new Point(x, y), radius, radius);
-        }
-    }
-
-    private static string? MaskName(string texture) => texture switch
-    {
-        "maimai_1519.png" => "mask_1519.png",
-        "maimai_2694.png" => "mask_2694.png",
-        "maimai_3691.png" => "mask_2694.png",   // 备用；正常走 ring_4862
-        "maimai_4862.png" => "ring_4862.png",
-        _ => null
-    };
-
-    private static Bitmap? MaskFor(string? fileName)
-    {
-        if (string.IsNullOrEmpty(fileName)) return null;
-        if (Masks.TryGetValue(fileName, out var cached)) return cached;
-
-        try
-        {
-            var path = MikuGuardPaths.Resolve(Path.Combine("Assets", "Hanabi", fileName));
-            if (!File.Exists(path))
-            {
-                GuardLog.Warn($"[hanabi] 缺少贴图：{path}");
-                Masks[fileName] = null!;
-                return null;
-            }
-
-            var bitmap = new Bitmap(path);
-            Masks[fileName] = bitmap;
-            return bitmap;
-        }
-        catch (Exception ex)
-        {
-            GuardLog.Error($"[hanabi] 贴图加载失败：{fileName}", ex);
-            Masks[fileName] = null!;
-            return null;
-        }
-    }
-
-    /// <summary>贴图按需释放（插件卸载时调用）。</summary>
-    public static void ClearCache()
-    {
-        foreach (var bitmap in Masks.Values) bitmap?.Dispose();
-        Masks.Clear();
+        HanabiRenderer.Render(context, _sim, Now, Bounds.Size);
     }
 }
 

@@ -42,6 +42,16 @@ def white_mask(name):
 
 
 def bake_ring():
+    """圆环 = 3691(形状) × 4862(颜色)。
+
+    原 shader 是 rgb = tex1.rgb * tex2.rgb，走加法混合；所以最终亮度是**逐通道相乘**。
+    这里把颜色归一化到最亮通道（保住色相），亮度写在 alpha 里：
+        alpha = luma(3691) × max(4862.rgb) / 255
+        rgb   = 4862.rgb 按 max 放大到满
+    这样 alpha 合成后得到的就是 rgb*alpha = 3691 × 4862，和原实现一致。
+    注意别用「4862 的亮度」去算 alpha——彩色像素的亮度很低（紫色 (182,0,236) 亮度才 55），
+    那样圆环会暗到几乎看不见。
+    """
     shape = Image.open(f"{BASE}/maimai_3691.png").convert("RGBA").load()
     color = Image.open(f"{BASE}/maimai_4862.png").convert("RGBA")
     w, h = color.size
@@ -51,8 +61,18 @@ def bake_ring():
     for y in range(h):
         for x in range(w):
             r, g, b, _ = c[x, y]
-            v = (luminance_px(shape[x, y]) * luminance_px((r, g, b, 255))) // 255
-            d[x, y] = (r, g, b, v)
+            mx = max(r, g, b)
+            m = luminance_px(shape[x, y])
+            if mx == 0 or m == 0:
+                d[x, y] = (0, 0, 0, 0)
+                continue
+            alpha = (m * mx) // 255
+            d[x, y] = (
+                min(255, r * 255 // mx),
+                min(255, g * 255 // mx),
+                min(255, b * 255 // mx),
+                alpha,
+            )
     out.save(f"{BASE}/ring_4862.png", "PNG")
     print("bake maimai_3691 x maimai_4862 -> ring_4862.png")
 
