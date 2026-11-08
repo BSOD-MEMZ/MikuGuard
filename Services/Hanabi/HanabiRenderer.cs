@@ -325,9 +325,10 @@ internal sealed class HanabiPainter : ICustomDrawOperation
                     {
                         // 星光 / 放射是 screen：黑底不会压暗背景
                         paint.BlendMode = SKBlendMode.Screen;
-                        paint.ColorFilter = Tint(emitter.Material == 80
-                            ? SKColors.White
-                            : new SKColor((byte)(sample.R * 255), (byte)(sample.G * 255), (byte)(sample.B * 255)));
+                        // 放射光芒（material 80）也是按粒子颜色染的（红→黄绿的随机插值），
+                        // 之前这里写死成白色，尖刺就全白了
+                        paint.ColorFilter = Tint(new SKColor(
+                            (byte)(sample.R * 255), (byte)(sample.G * 255), (byte)(sample.B * 255)));
                     }
 
                     canvas.Save();
@@ -452,7 +453,9 @@ internal sealed class HanabiPainter : ICustomDrawOperation
     {
         if (radius < 2) return;
 
-        var alpha = (float)Math.Clamp(sample.A, 0, 1);
+        // shader 里最终是 outA = a1 * 0.75，而且 a1 只在中段接近 1；
+        // 这里再压一档——彩虹盘如果太实，screen 叠上去的放射光芒就完全看不出来了
+        var alpha = (float)Math.Clamp(sample.A * 0.45, 0, 1);
         if (alpha <= 0.004) return;
 
         var colors = BuildSectorColors(_now, out var positions);

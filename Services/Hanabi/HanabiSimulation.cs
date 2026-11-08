@@ -296,10 +296,11 @@ public sealed class HanabiSimulation
             for (var c = 0; c < 4; c++) color[c] = low[c] + (color[c] - low[c]) * particle.Random;
         }
 
-        // exposure 是 2 的指数（shader 里 exp2(frame.w)）。
-        // 原实现把它乘在 rgb 上、再乘以 tex.a，最终可见亮度 = rgb × 曝光 × 透明度；
-        // 这里没有 HDR，就把曝光折进 alpha（颜色保持色相，不然乘完就全白成一片）。
-        var gain = Math.Pow(2, emitter.Exposure);
+        // exposure 是 2 的指数（shader 里 exp2(frame.w)），原实现乘在 rgb 上。
+        // 这里没有 HDR，交给渲染层折进 alpha，颜色保持色相。
+        // 注意：彩虹光环（material 49）有自己的 pixel shader，**根本不用 frame.w**，
+        // 所以它的曝光必须当 1 处理——否则 alpha 会被顶满，把放射光芒盖掉。
+        var gain = emitter.Material == 49 ? 1.0 : Math.Pow(2, emitter.Exposure);
 
         sample = new HanabiSample
         {

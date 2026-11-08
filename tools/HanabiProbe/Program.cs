@@ -20,6 +20,7 @@ internal static class Program
         AppBuilder.Configure<ProbeApp>().UsePlatformDetect().SetupWithoutStarting();
 
         var outDir = args.Length > 0 ? args[0] : Path.Combine(AppContext.BaseDirectory, "frames");
+        var only = args.FirstOrDefault(a => a.StartsWith("--only"))?.Split('=').LastOrDefault();
         Directory.CreateDirectory(outDir);
 
         var probe = new HanabiSimulation(20261108);
@@ -32,14 +33,34 @@ internal static class Program
         Console.WriteLine($"发射器 {probe.Emitters.Count} 个");
 
         // 同一颗种子、同一时刻，保证每次跑出来一样
-        var times = new[] { 0.10, 0.30, 0.55, 0.90, 1.40 };
+        var times = new[] { 0.12, 0.20, 0.35, 0.60, 1.00 };
         foreach (var t in times)
         {
             var sim = new HanabiSimulation(20261108);
             sim.Load();
+            if (only != null)
+            {
+                // 只保留指定材质，方便单独排查某一层（先过滤再 Burst，粒子索引才对得上）
+                foreach (var em in sim.Emitters.Where(e => !e.Material.ToString().Equals(only)).ToList())
+                    sim.Emitters.Remove(em);
+            }
+
             sim.Burst(0, 0.5, 0.5);
 
             var total = sim.Bursts.Sum(b => b.Particles.Count);
+
+            if (Math.Abs(t - 0.999) < 0.001)
+            {
+                var scale0 = Math.Max(Width, Height) / 1000.0;
+                foreach (var b in sim.Bursts)
+                foreach (var pt in b.Particles)
+                {
+                    var em = sim.Emitters[pt.Emitter];
+                    if (em.Material is not (80 or 49 or 50)) continue;
+                    var ok = HanabiSimulation.Sample(em, pt, t, b.Start, scale0, out var sp);
+                    Console.WriteLine($"  mat{em.Material} {em.Name} ok={ok} dia={sp.Diameter:0} a={sp.A:0.00} rot={sp.Rotation:0.00} tex={string.Join("/", em.Textures)}");
+                }
+            }
             using var bitmap = new RenderTargetBitmap(new PixelSize(Width, Height), new Vector(96, 96));
             using (var ctx = bitmap.CreateDrawingContext())
             {
