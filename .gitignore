@@ -5,3 +5,4 @@ dist/
 _probe/
 *.user
 .vs/
+_prev*
