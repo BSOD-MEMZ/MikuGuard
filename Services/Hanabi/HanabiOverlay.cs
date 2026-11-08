@@ -301,8 +301,10 @@ public static class HanabiOverlay
             var ny = 0.5;
             if (screen is { Bounds.Width: > 0, Bounds.Height: > 0 })
             {
-                nx = Math.Clamp((point.X - screen.Bounds.X) / (double)screen.Bounds.Width, 0.05, 0.95);
-                ny = Math.Clamp((point.Y - screen.Bounds.Y) / (double)screen.Bounds.Height, 0.05, 0.95);
+                // 指示点常在屏幕角落（信息岛在最上面），花心正好压边的话大半朵会被裁掉，
+                // 所以往里收一点：仍然是从指示点那个方向开出来的。
+                nx = Math.Clamp((point.X - screen.Bounds.X) / (double)screen.Bounds.Width, 0.15, 0.85);
+                ny = Math.Clamp((point.Y - screen.Bounds.Y) / (double)screen.Bounds.Height, 0.15, 0.85);
             }
 
             if (_window != null)
