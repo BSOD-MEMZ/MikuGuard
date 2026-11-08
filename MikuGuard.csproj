@@ -51,7 +51,6 @@
     <Content Include="Assets\**\*.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\**\*.txt" CopyToOutputDirectory="PreserveNewest" />
     <!-- 花火的原版贴图只用来生成遮罩（tools/make_hanabi_assets.py），不进包体 -->
-    <Content Remove="Assets\Hanabi\maimai_*.png" />
   </ItemGroup>
 
 </Project>

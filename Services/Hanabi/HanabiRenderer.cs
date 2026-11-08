@@ -79,7 +79,7 @@ public static class HanabiRenderer
                         continue;
                     }
 
-                    var file = emitter.Material == 50 ? "ring_4862.png" : MaskName(emitter.Textures);
+                    var file = MaskName(emitter.Textures);
                     var bitmap = FallbackTexture(file);
                     if (bitmap == null) continue;
 
@@ -164,8 +164,8 @@ public static class HanabiRenderer
         {
             "maimai_1519.png" => "mask_1519.png",
             "maimai_2694.png" => "mask_2694.png",
-            "maimai_3691.png" => "ring_4862.png",
-            "maimai_4862.png" => "ring_4862.png",
+            "maimai_3691.png" => "maimai_3691.png",
+            "maimai_4862.png" => "maimai_3691.png",
             _ => null
         };
     }
@@ -216,9 +216,10 @@ public static class HanabiRenderer
 /// </summary>
 internal sealed class HanabiPainter : ICustomDrawOperation
 {
-    private static readonly Dictionary<string, SKImage?> Textures = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, SKBitmap?> Textures = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<uint, SKColorFilter> Filters = new();
     private static readonly Dictionary<(uint, float), SKColorFilter> ScaledFilters = new();
+    private static readonly Dictionary<(string, string, float), SKBitmap?> Sprites = new();
 
     // 扇形的硬边界渐变：调色板绕一圈重复 RainbowCycles 次，色块之间不留过渡
     private static readonly SKColor[] SectorColors;
@@ -309,8 +310,10 @@ internal sealed class HanabiPainter : ICustomDrawOperation
                         continue;
                     }
 
-                    var file = emitter.Material == 50 ? "ring_4862.png" : HanabiRenderer.MaskName(emitter.Textures);
-                    var image = Texture(file);
+                    // 圆环是两张贴图相乘（3691 形状 × 4862 色轮），运行时合成，见 Sprite()
+                    var image = emitter.Material == 50
+                        ? Sprite("maimai_3691.png", "maimai_4862.png", emitter.Exposure)
+                        : Texture(HanabiRenderer.MaskName(emitter.Textures));
                     if (image == null) continue;
 
                     paint.Reset();
@@ -335,7 +338,7 @@ internal sealed class HanabiPainter : ICustomDrawOperation
 
                     canvas.Save();
                     canvas.RotateDegrees((float)(sample.Rotation * 180 / Math.PI), x, y);
-                    canvas.DrawImage(image, new SKRect(0, 0, image.Width, image.Height),
+                    canvas.DrawBitmap(image, new SKRect(0, 0, image.Width, image.Height),
                         new SKRect(x - radius, y - radius, x + radius, y + radius), paint);
                     canvas.Restore();
                 }
@@ -580,7 +583,86 @@ internal sealed class HanabiPainter : ICustomDrawOperation
         return filter;
     }
 
-    private static SKImage? Texture(string? fileName)
+    /// <summary>
+    /// 合成 sprite 图：rgb = tex0 × tex1 × 2^exposure，**alpha = max(rgb)**。
+    ///
+    /// 原版 SpritePixel 返回 `float4(rgb * a, saturate(max(rgb)) * a)`，alpha 取的是亮度的最大值。
+    /// 之前把圆环烘焙成 alpha=255，四角虽然全黑但 alpha=1，整块四边形会把叠加层的 alpha 顶满，
+    /// 桌面上就出现一块黑色半透明正方形。
+    ///
+    /// 不走 PNG 中转：解码器会把 rgb>alpha 的像素夹回去，而这里要的正是 rgb 可以大于 alpha。
+    /// </summary>
+    private static SKBitmap? Sprite(string first, string? second, double exposure)
+    {
+        var key = (first, second ?? string.Empty, (float)exposure);
+        if (Sprites.TryGetValue(key, out var cached)) return cached;
+
+        SKBitmap? result = null;
+        try
+        {
+            var pathA = HanabiRenderer.TexturePath(first);
+            var pathB = second == null ? null : HanabiRenderer.TexturePath(second);
+            using var a = pathA == null ? null : SKBitmap.Decode(pathA);
+            using var b = pathB == null ? null : SKBitmap.Decode(pathB);
+            if (a == null)
+            {
+                GuardLog.Warn($"[hanabi] 合成贴图缺少底图：{first}");
+            }
+            else
+            {
+                var w = a.Width;
+                var h = a.Height;
+                var gain = (float)Math.Pow(2, exposure);
+                var bitmap = new SKBitmap(new SKImageInfo(w, h, SKColorType.Rgba8888, SKAlphaType.Premul));
+
+                unsafe
+                {
+                    var pa = (uint*)a.GetPixels().ToPointer();
+                    var pb = b == null ? null : (uint*)b.GetPixels().ToPointer();
+                    var po = (uint*)bitmap.GetPixels().ToPointer();
+                    var sa = a.RowBytes / 4;
+                    var sb = b == null ? 0 : b.RowBytes / 4;
+                    var so = bitmap.RowBytes / 4;
+
+                    for (var y = 0; y < h; y++)
+                    {
+                        for (var x = 0; x < w; x++)
+                        {
+                            var ca = pa[y * sa + x];
+                            var r = (ca >> 0) & 0xFF;
+                            var g = (ca >> 8) & 0xFF;
+                            var bl = (ca >> 16) & 0xFF;
+
+                            if (pb != null)
+                            {
+                                var cb = pb[y * sb + x];
+                                r = r * ((cb >> 0) & 0xFF) / 255;
+                                g = g * ((cb >> 8) & 0xFF) / 255;
+                                bl = bl * ((cb >> 16) & 0xFF) / 255;
+                            }
+
+                            var rr = (uint)Math.Min(255, (int)(r * gain));
+                            var gg = (uint)Math.Min(255, (int)(g * gain));
+                            var bb = (uint)Math.Min(255, (int)(bl * gain));
+                            var al = Math.Max(rr, Math.Max(gg, bb));
+                            po[y * so + x] = (al << 24) | (bb << 16) | (gg << 8) | rr;
+                        }
+                    }
+                }
+
+                result = bitmap;
+            }
+        }
+        catch (Exception ex)
+        {
+            GuardLog.Error($"[hanabi] 合成贴图失败：{first} × {second}", ex);
+        }
+
+        Sprites[key] = result;
+        return result;
+    }
+
+    private static SKBitmap? Texture(string? fileName)
     {
         if (string.IsNullOrEmpty(fileName)) return null;
         if (Textures.TryGetValue(fileName, out var cached)) return cached;
@@ -588,13 +670,7 @@ internal sealed class HanabiPainter : ICustomDrawOperation
         try
         {
             var path = HanabiRenderer.TexturePath(fileName);
-            SKImage? image = null;
-            if (path != null)
-            {
-                using var bitmap = SKBitmap.Decode(path);
-                if (bitmap != null) image = SKImage.FromBitmap(bitmap);
-            }
-
+            var image = path == null ? null : SKBitmap.Decode(path);
             Textures[fileName] = image;
             return image;
         }
@@ -614,5 +690,7 @@ internal sealed class HanabiPainter : ICustomDrawOperation
         Filters.Clear();
         foreach (var filter in ScaledFilters.Values) filter.Dispose();
         ScaledFilters.Clear();
+        foreach (var sheet in Sprites.Values) sheet?.Dispose();
+        Sprites.Clear();
     }
 }

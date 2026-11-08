@@ -66,8 +66,9 @@ internal static class Program
             using var bitmap = new RenderTargetBitmap(new PixelSize(Width, Height), new Vector(96, 96));
             using (var ctx = bitmap.CreateDrawingContext())
             {
-                ctx.FillRectangle(new SolidColorBrush(Color.FromRgb(10, 12, 16)),
-                    new Rect(0, 0, Width, Height));
+                // --white 用白底：叠加层如果有 alpha 污染（黑方块）会一眼看出来
+                var bg = args.Contains("--white") ? Colors.White : Color.FromRgb(10, 12, 16);
+                ctx.FillRectangle(new SolidColorBrush(bg), new Rect(0, 0, Width, Height));
                 SW.Restart();
                 HanabiRenderer.Render(ctx, sim, t, new Size(Width, Height));
                 Console.Write($"  渲染 {SW.ElapsedMilliseconds}ms  ");
