@@ -74,7 +74,7 @@ public static class HanabiRenderer
 
                     if (emitter.Material == 49)
                     {
-                        FallbackRainbowRing(context, position.X, position.Y, sample);
+                        FallbackRainbow(context, position.X, position.Y, sample);
                         continue;
                     }
 
@@ -108,38 +108,32 @@ public static class HanabiRenderer
         }
     }
 
-    private static void FallbackRainbowRing(DrawingContext context, double x, double y, in HanabiSample sample)
+    /// <summary>降级路径的彩虹光环：实心圆 + 锥形渐变（精确的扇形分割要 Skia 才做得到）。</summary>
+    private static void FallbackRainbow(DrawingContext context, double x, double y, in HanabiSample sample)
     {
         var radius = sample.Diameter / 2;
         if (radius < 2) return;
 
-        var brush = RainbowBrush();
-
         using (context.PushOpacity(Math.Clamp(sample.A * 0.75, 0, 1)))
         {
-            foreach (var (bandScale, thickness, bandAlpha) in Bands)
-            {
-                using (context.PushOpacity(bandAlpha))
-                {
-                    var pen = new Pen(brush, Math.Max(1.5, radius * thickness)) { LineCap = PenLineCap.Flat };
-                    context.DrawEllipse(null, pen, new Point(x, y), radius * bandScale, radius * bandScale);
-                }
-            }
+            context.DrawEllipse(RainbowBrush(), null, new Point(x, y), radius, radius);
         }
     }
 
     // ===================== 共用 =====================
 
-    // 半径系数 / 线宽系数 / 该圈的不透明度。原版 shader 是 0.5~0.8 半径上一圈圈细条纹，
-    // 越往外越淡；用几根细环近似，别做成三根粗线（那看着像靶子）。
-    internal static readonly (double Scale, double Thickness, double Alpha)[] Bands =
+    // 彩虹光环的调色板（取自原 shader 的 cb0[6..10]），按角度循环上色
+    internal static readonly SKColor[] RainbowPalette =
     {
-        (0.48, 0.013, 0.95),
-        (0.55, 0.011, 0.72),
-        (0.62, 0.012, 0.54),
-        (0.70, 0.010, 0.38),
-        (0.78, 0.011, 0.24)
+        new(237, 58, 156),    // 粉
+        new(255, 90, 18),     // 橙
+        new(255, 216, 0),     // 黄
+        new(184, 210, 0),     // 黄绿
+        new(0, 160, 233)      // 蓝
     };
+
+    /// <summary>绕一圈重复几个色环（shader 里是 angle*3）。</summary>
+    internal const int RainbowCycles = 3;
 
     private static ConicGradientBrush RainbowBrush() => new()
     {
@@ -224,13 +218,35 @@ internal sealed class HanabiPainter : ICustomDrawOperation
     private static readonly Dictionary<string, SKImage?> Textures = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<uint, SKColorFilter> Filters = new();
 
-    private static readonly SKColor[] RainbowColors =
-    {
-        new(237, 58, 156), new(255, 90, 18), new(255, 216, 0), new(184, 210, 0),
-        new(0, 160, 233), new(120, 60, 220), new(237, 58, 156)
-    };
+    // 扇形的硬边界渐变：调色板绕一圈重复 RainbowCycles 次，色块之间不留过渡
+    private static readonly SKColor[] SectorColors;
+    private static readonly float[] SectorPositions;
 
-    private static readonly float[] RainbowPositions = { 0.00f, 0.15f, 0.31f, 0.46f, 0.62f, 0.78f, 0.92f };
+    static HanabiPainter()
+    {
+        var palette = HanabiRenderer.RainbowPalette;
+        var sectors = palette.Length * HanabiRenderer.RainbowCycles;
+        var colors = new List<SKColor>(sectors * 2 + 1);
+        var positions = new List<float>(sectors * 2 + 1);
+
+        for (var i = 0; i < sectors; i++)
+        {
+            var color = palette[i % palette.Length];
+            var start = (float)i / sectors;
+            var end = (float)(i + 1) / sectors;
+
+            positions.Add(start);
+            colors.Add(color);
+            positions.Add(Math.Max(start, end - 0.0008f));
+            colors.Add(color);
+        }
+
+        positions.Add(1f);
+        colors.Add(palette[0]);
+
+        SectorColors = colors.ToArray();
+        SectorPositions = positions.ToArray();
+    }
 
     private readonly HanabiSimulation _sim;
     private readonly double _now;
@@ -267,7 +283,6 @@ internal sealed class HanabiPainter : ICustomDrawOperation
         var scale = Math.Max(_size.Width, _size.Height) / 1000.0;
 
         using var paint = new SKPaint { IsAntialias = true };
-        using var shader = SKShader.CreateSweepGradient(SKPoint.Empty, RainbowColors, RainbowPositions);
 
         for (var layer = 0; layer < 3; layer++)
         {
@@ -288,7 +303,7 @@ internal sealed class HanabiPainter : ICustomDrawOperation
 
                     if (emitter.Material == 49)
                     {
-                        DrawRainbow(canvas, paint, shader, x, y, radius, sample);
+                        DrawRainbow(canvas, paint, x, y, radius, sample);
                         continue;
                     }
 
@@ -324,29 +339,59 @@ internal sealed class HanabiPainter : ICustomDrawOperation
         }
     }
 
-    private static void DrawRainbow(SKCanvas canvas, SKPaint paint, SKShader shader, float x, float y,
-        float radius, in HanabiSample sample)
+    /// <summary>
+    /// 彩虹光环：**按角度上色的实心扇形盘**（原先我理解成一圈圈的环，是错的）。
+    /// 原 shader 里 hue 来自 atan2 出来的角度、乘 3 后取 frac，再用阈值从 5 个调色板颜色里挑一个，
+    /// 所以是一圈硬边的彩色扇形；亮度从圆心往外衰减，整圈还会按角速度转。
+    /// </summary>
+    private static void DrawRainbow(SKCanvas canvas, SKPaint paint, float x, float y, float radius,
+        in HanabiSample sample)
     {
-        paint.Reset();
-        paint.IsAntialias = true;
-        paint.Shader = shader;
-        paint.BlendMode = SKBlendMode.SrcOver;
-        paint.Style = SKPaintStyle.Stroke;
+        if (radius < 2) return;
 
-        var alpha = (byte)(Math.Clamp(sample.A * 0.75, 0, 1) * 255);
+        var alpha = (float)Math.Clamp(sample.A * 0.75, 0, 1);
+        if (alpha <= 0.004) return;
 
-        canvas.Save();
+        // 整盘做成一层，再用径向渐变做 DstIn 遮罩，得到「中心亮、边缘散开」的扇形
+        var save = canvas.SaveLayer();
         canvas.Translate(x, y);
-        // shader 是原点做的扫掠渐变，平移后中心正好落在粒子位置
-        for (var i = 0; i < HanabiRenderer.Bands.Length; i++)
+        // 扇形跟着粒子的角速度转（原版 angularVelocity 就是这么用的）
+        canvas.RotateDegrees((float)(sample.Rotation * 180 / Math.PI));
+
+        using (var sweep = SKShader.CreateSweepGradient(SKPoint.Empty, SectorColors, SectorPositions, SKMatrix.Identity))
+        using (var colorPaint = new SKPaint
+               {
+                   IsAntialias = true,
+                   Style = SKPaintStyle.Fill,
+                   Shader = sweep,
+                   BlendMode = SKBlendMode.SrcOver,
+                   Color = SKColors.White.WithAlpha((byte)(alpha * 255))
+               })
         {
-            var (bandScale, thickness, bandAlpha) = HanabiRenderer.Bands[i];
-            paint.StrokeWidth = Math.Max(1.5f, radius * (float)thickness);
-            paint.Color = SKColors.White.WithAlpha((byte)(alpha * bandAlpha));
-            canvas.DrawCircle(0, 0, radius * (float)bandScale, paint);
+            canvas.DrawCircle(0, 0, radius, colorPaint);
         }
 
-        canvas.Restore();
+        // 径向遮罩：半径 55% 以内保持不动，之后渐隐到 0
+        using (var fade = SKShader.CreateRadialGradient(SKPoint.Empty, radius,
+                   new[]
+                   {
+                       SKColors.White, SKColors.White,
+                       new SKColor(255, 255, 255, 120),
+                       new SKColor(255, 255, 255, 0)
+                   },
+                   new[] { 0f, 0.55f, 0.82f, 1f }, SKShaderTileMode.Clamp))
+        using (var maskPaint = new SKPaint
+               {
+                   IsAntialias = true,
+                   Style = SKPaintStyle.Fill,
+                   Shader = fade,
+                   BlendMode = SKBlendMode.DstIn
+               })
+        {
+            canvas.DrawRect(new SKRect(-radius, -radius, radius, radius), maskPaint);
+        }
+
+        canvas.RestoreToCount(save);
     }
 
     /// <summary>用一个颜色去乘贴图（等价于 shader 里的 rgb *= tint）。</summary>
