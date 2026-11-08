@@ -406,12 +406,14 @@ internal sealed class HanabiPainter : ICustomDrawOperation
         //   step(1.0, y) 恒为 0 → 第二段把颜色覆盖成 cb7(蓝)
         //   剩下的阈值是 0.2 / 0.4 / 0.6，所以最后那段是双倍宽（0.6~1.0）
         //   cb5(灰) 和 cb6(粉) 都会被后面覆盖掉，实际不出现——官方图里的粉色是另一层的色轮给的
+        // 官方是粉/橙/黄/黄绿/蓝轮转（cb6~cb10 五个调色板颜色），转一圈重复 3 次
         var palette = new[]
         {
-            Pastel(new SKColor(255, 90, 18)),    // 橙   y < 0.2
-            Pastel(new SKColor(255, 216, 0)),    // 黄   y < 0.4
-            Pastel(new SKColor(184, 210, 0)),    // 黄绿 y < 0.6
-            Pastel(new SKColor(0, 160, 233))     // 蓝   y < 1.0（双宽）
+            Pastel(new SKColor(237, 58, 156)),   // 粉  cb6
+            Pastel(new SKColor(255, 90, 18)),    // 橙  cb10
+            Pastel(new SKColor(255, 216, 0)),    // 黄  cb9
+            Pastel(new SKColor(184, 210, 0)),    // 黄绿 cb8
+            Pastel(new SKColor(0, 160, 233))     // 蓝  cb7
         };
 
         // shader：y = fract(角度×3/(2π) + offset)，offset = floor(9t)/5
@@ -422,15 +424,18 @@ internal sealed class HanabiPainter : ICustomDrawOperation
         var colors = new List<SKColor>();
         var pos = new List<float>();
 
-        // 官方渲染里是「彩条 / 灰白条」交替：灰白来自 shader 的 cb5(0.5,0.5,0.5)，
-        // 也就是说每段色带的后半截被灰白顶掉。这里就按 24 条（12 段 × 彩+灰）来切。
-        var gray = new SKColor(190, 190, 190);
-        const int stripes = 24;
+        // 官方渲染里条纹是「彩条 / 灰白条」交替，而且**每条之间有空隙**：
+        // 沿圆弧取亮度剖面，亮暗各占一半，暗的地方能掉到 30/255（基本透明）。
+        // 所以按 15 彩 + 15 灰 = 30 个槽、每槽只占一半来切。
+        var gray = new SKColor(214, 214, 214);
+        var clear = SKColor.Empty;
+        const int slots = 30;
+        const float duty = 0.5f;      // 每条只占槽宽的一半，剩下是空隙
 
-        for (var i = 0; i < stripes; i++)
+        for (var i = 0; i < slots; i++)
         {
-            var u0 = (float)i / stripes;
-            var u1 = (float)(i + 1) / stripes;
+            var slot0 = (float)i / slots;
+            var slot1 = (float)(i + 1) / slots;
 
             SKColor color;
             if (i % 2 == 1)
@@ -439,16 +444,24 @@ internal sealed class HanabiPainter : ICustomDrawOperation
             }
             else
             {
-                var y = u0 * cycles + offset;
-                y -= (float)Math.Floor(y);
-                var band = y < 0.2f ? 0 : y < 0.4f ? 1 : y < 0.6f ? 2 : 3;
-                color = palette[band];
+                // 15 个彩槽 = 5 色 × 3 圈；offset 让色带随时间步进平移
+                var shifted = (float)((i / 2) / 5.0 + offset * cycles);
+                shifted -= (float)Math.Floor(shifted);
+                color = palette[(int)(shifted * palette.Length) % palette.Length];
             }
 
+            var colorEnd = slot0 + (slot1 - slot0) * duty;
+
+            // 亮条
             colors.Add(color);
-            pos.Add(u0);
+            pos.Add(slot0);
             colors.Add(color);
-            pos.Add(Math.Max(u0, u1 - 0.0006f));
+            pos.Add(Math.Max(slot0, colorEnd - 0.0004f));
+            // 空隙
+            colors.Add(clear);
+            pos.Add(Math.Max(slot0, colorEnd));
+            colors.Add(clear);
+            pos.Add(Math.Max(slot0, slot1 - 0.0004f));
         }
 
         colors.Add(colors[0]);
