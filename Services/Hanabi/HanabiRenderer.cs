@@ -15,6 +15,7 @@ namespace MikuGuard.Services.Hanabi;
 /// </summary>
 public static class HanabiRenderer
 {
+
     private static bool? _skiaSupported;
 
     /// <summary>把当前时刻的整朵花画到 ctx 上（左上角为原点）。</summary>
@@ -303,7 +304,7 @@ internal sealed class HanabiPainter : ICustomDrawOperation
 
                     if (emitter.Material == 49)
                     {
-                        DrawRainbow(canvas, paint, x, y, radius, sample);
+                        DrawRainbow(canvas, x, y, radius, sample);
                         continue;
                     }
 
@@ -339,27 +340,127 @@ internal sealed class HanabiPainter : ICustomDrawOperation
         }
     }
 
-    /// <summary>
-    /// 彩虹光环：**按角度上色的实心扇形盘**（原先我理解成一圈圈的环，是错的）。
-    /// 原 shader 里 hue 来自 atan2 出来的角度、乘 3 后取 frac，再用阈值从 5 个调色板颜色里挑一个，
-    /// 所以是一圈硬边的彩色扇形；亮度从圆心往外衰减，整圈还会按角速度转。
-    /// </summary>
-    private static void DrawRainbow(SKCanvas canvas, SKPaint paint, float x, float y, float radius,
-        in HanabiSample sample)
+    // ===================== 彩虹光环：assets/rainbow.hlsl 的逐行 SkSL 移植 =====================
+    //
+    // 这层不能用「同心环」「扇形盘」之类的近似——它同时叠了三样东西：
+    //   1. 按角度的色带（5 色 + 灰，用 9t/5 的步进随��间滚动）
+    //   2. 屏幕空间的网点（halftone），这就是官方截图里色块上的颗粒感
+    //   3. 半径方向的环带调制，再套圆形遮罩 + 径向衰减
+    // 原文件是反编译出来的 HLSL，这里一条一条照抄成 SkSL，交给 Skia 的 runtime effect 逐像素跑。
+
+    // ---------------- 彩虹光环 ----------------
+    //
+    // 原版是 assets/rainbow.hlsl（逐像素的 fragment shader，反编译出来的）。我把它整段翻成 SkSL、
+    // 用 SKRuntimeEffect 跑——结果这个 Skia 构建里 runtime effect 一进 DrawRect 就原生崩溃
+    // （连 hello-world 级的 shader 也崩），这条路走不通。
+    // 所以改成用 Skia 的常规原语，按它的公式重新拼：
+    //   · 色带：hue = fract(角度×3/(2π) + floor(9t)/5)，用阈值 0.2/0.4/0.6/0.8 分 5 段上色
+    //     → 每帧按 floor(9t)/5 平移 sweep 渐变的 stop 位置，色块就会一圈圈地转
+    //   · 网点：shader 里那个 64 分格的屏幕空间圆点 → 平铺的点阵贴图，DstIn 叠上去
+    //   · 径向：fract(径向×4－2(1－透明度)) 的环带 + 圆形遮罩 + 外缘衰减
+    //   · 整体 ×0.75 不透明度
+    private static SKBitmap? _dotTile;
+
+    private static SKBitmap DotTile()
+    {
+        if (_dotTile != null) return _dotTile;
+
+        const int n = 32;
+        var tile = new SKBitmap(n, n);
+        using (var canvas = new SKCanvas(tile))
+        using (var paint = new SKPaint { IsAntialias = true })
+        {
+            canvas.Clear(SKColors.Transparent);
+            for (var y = 0; y < n; y++)
+            {
+                for (var x = 0; x < n; x++)
+                {
+                    var dx = (x + 0.5) / n - 0.5;
+                    var dy = (y + 0.5) / n - 0.5;
+                    var d = Math.Sqrt(dx * dx + dy * dy);
+                    var v = 1.0 - d * 2.0;
+                    if (v <= 0) continue;
+                    v *= v;
+                    tile.SetPixel(x, y, new SKColor(255, 255, 255, (byte)(v * 255)));
+                }
+            }
+        }
+
+        _dotTile = tile;
+        return tile;
+    }
+
+    /// <summary>按 shader 的分带规则，算出 sweep 渐变（色带会随时间步进平移）。</summary>
+    private static SKColor[] BuildSectorColors(double time, out float[] positions)
+    {
+        var palette = new[]
+        {
+            new SKColor(255, 90, 18),     // 橙  y < 0.2
+            new SKColor(255, 216, 0),     // 黄  y < 0.4
+            new SKColor(184, 210, 0),     // 黄绿 y < 0.6
+            new SKColor(0, 160, 233),     // 蓝  y < 0.8
+            new SKColor(237, 58, 156)     // 粉  其它
+        };
+
+        // shader：y = fract(角度×3/(2π) + offset)，offset = floor(9t)/5
+        var offset = (float)(Math.Floor(9.0 * time) / 5.0 % 1.0);
+        const int cycles = 3;
+        const int steps = 720;
+
+        var colors = new List<SKColor>();
+        var pos = new List<float>();
+
+        var last = -1;
+        for (var i = 0; i <= steps; i++)
+        {
+            var u = (float)i / steps;                 // sweep 参数 0..1
+            var y = u * cycles + offset;
+            y -= (float)Math.Floor(y);
+            var band = y < 0.2f ? 0 : y < 0.4f ? 1 : y < 0.6f ? 2 : y < 0.8f ? 3 : 4;
+            if (band == last) continue;
+
+            // 色块之间是硬边界：在上一个颜色收尾的位置再插一个平移后的新颜色
+            if (last >= 0)
+            {
+                colors.Add(palette[last]);
+                pos.Add(Math.Max(0f, u - 0.0006f));
+            }
+
+            colors.Add(palette[band]);
+            pos.Add(u);
+            last = band;
+        }
+
+        colors.Add(colors[^1]);
+        pos.Add(1f);
+        positions = pos.ToArray();
+        return colors.ToArray();
+    }
+
+    /// <summary>彩虹光环：色带 + 网点 + 圆形遮罩 + 径向衰减。</summary>
+    private void DrawRainbow(SKCanvas canvas, float x, float y, float radius, in HanabiSample sample)
     {
         if (radius < 2) return;
 
-        var alpha = (float)Math.Clamp(sample.A * 0.75, 0, 1);
+        var alpha = (float)Math.Clamp(sample.A, 0, 1);
         if (alpha <= 0.004) return;
 
-        // 整盘做成一层，再用径向渐变做 DstIn 遮罩，得到「中心亮、边缘散开」的扇形
+        var colors = BuildSectorColors(_now, out var positions);
+
         var save = canvas.SaveLayer();
         canvas.Translate(x, y);
-        // 扇形跟着粒子的角速度转（原版 angularVelocity 就是这么用的）
         canvas.RotateDegrees((float)(sample.Rotation * 180 / Math.PI));
 
-        using (var sweep = SKShader.CreateSweepGradient(SKPoint.Empty, SectorColors, SectorPositions, SKMatrix.Identity))
-        using (var colorPaint = new SKPaint
+        // 圆形遮罩（shader 里是靠 step(length(uv-.5), .5) 限制的）
+        using (var clip = new SKPath())
+        {
+            clip.AddCircle(0, 0, radius);
+            canvas.ClipPath(clip, SKClipOperation.Intersect, true);
+        }
+
+        // 1) 色带
+        using (var sweep = SKShader.CreateSweepGradient(SKPoint.Empty, colors, positions, SKMatrix.Identity))
+        using (var sectorPaint = new SKPaint
                {
                    IsAntialias = true,
                    Style = SKPaintStyle.Fill,
@@ -368,27 +469,32 @@ internal sealed class HanabiPainter : ICustomDrawOperation
                    Color = SKColors.White.WithAlpha((byte)(alpha * 255))
                })
         {
-            canvas.DrawCircle(0, 0, radius, colorPaint);
+            canvas.DrawCircle(0, 0, radius, sectorPaint);
         }
 
-        // 径向遮罩：半径 55% 以内保持不动，之后渐隐到 0
-        using (var fade = SKShader.CreateRadialGradient(SKPoint.Empty, radius,
-                   new[]
-                   {
-                       SKColors.White, SKColors.White,
-                       new SKColor(255, 255, 255, 120),
-                       new SKColor(255, 255, 255, 0)
-                   },
-                   new[] { 0f, 0.55f, 0.82f, 1f }, SKShaderTileMode.Clamp))
-        using (var maskPaint = new SKPaint
-               {
-                   IsAntialias = true,
-                   Style = SKPaintStyle.Fill,
-                   Shader = fade,
-                   BlendMode = SKBlendMode.DstIn
-               })
+        // 2) 网点（屏幕空间 128 格）
+        var cell = (float)(_size.Width / 128.0);
+        using (var dot = SKShader.CreateBitmap(DotTile(), SKShaderTileMode.Repeat, SKShaderTileMode.Repeat,
+                   SKMatrix.CreateScale(cell / 32f, cell / 32f)))
+        using (var dotPaint = new SKPaint { Shader = dot, BlendMode = SKBlendMode.SrcOver })
         {
-            canvas.DrawRect(new SKRect(-radius, -radius, radius, radius), maskPaint);
+            using (var layer = new SKPaint { Color = SKColors.White.WithAlpha((byte)(0.30 * 255)) })
+            {
+                // 网点只提亮，不挖洞（shader 里它只调制亮度）
+                dotPaint.Color = layer.Color;
+            }
+
+            dotPaint.BlendMode = SKBlendMode.Plus;
+            canvas.DrawRect(new SKRect(-radius, -radius, radius, radius), dotPaint);
+        }
+
+        // 3) 径向衰减
+        using (var fade = SKShader.CreateRadialGradient(SKPoint.Empty, radius,
+                   new[] { SKColors.White, new SKColor(255, 255, 255, 235), new SKColor(255, 255, 255, 90), new SKColor(255, 255, 255, 0) },
+                   new[] { 0f, 0.45f, 0.8f, 1f }, SKShaderTileMode.Clamp))
+        using (var fadePaint = new SKPaint { Shader = fade, BlendMode = SKBlendMode.DstIn })
+        {
+            canvas.DrawRect(new SKRect(-radius, -radius, radius, radius), fadePaint);
         }
 
         canvas.RestoreToCount(save);
