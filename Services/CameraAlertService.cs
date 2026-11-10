@@ -52,7 +52,7 @@ public sealed class CameraAlertService
         var title = string.IsNullOrWhiteSpace(_settings.Alert.Title) ? "摄像头正在被使用" : _settings.Alert.Title;
         var body = BuildBody(alert);
 
-        var image = ResolveImagePath();
+        var image = ResolveImagePath(_settings.Alert.ImagePath);
         var preferToast = _settings.Alert.Presentation != AlertPresentation.InApp;
         if (preferToast && _toast.TryShow(title, body, actions, image))
         {
@@ -77,6 +77,53 @@ public sealed class CameraAlertService
             catch (Exception ex)
             {
                 GuardLog.Error("[alert] 弹窗显示失败", ex);
+            }
+        });
+    }
+
+    /// <summary>
+    /// 摄像头被释放后的「危机解除」提示。只由服务在**本次真的报过警**之后调用，
+    /// 平时摄像头被关掉不会走到这里。
+    /// </summary>
+    public void ShowClosed(GuardAlert? lastAlert)
+    {
+        var cfg = _settings.Alert;
+        if (!cfg.Enabled || !cfg.NotifyOnClosed) return;
+
+        var title = string.IsNullOrWhiteSpace(cfg.ClosedTitle) ? "摄像头已关闭" : cfg.ClosedTitle;
+        var body = BuildClosedBody(lastAlert);
+        var image = ResolveImagePath(cfg.ClosedImagePath);
+
+        if (cfg.Presentation != AlertPresentation.InApp &&
+            _toast.TryShow(title, body, Array.Empty<ToastActionButton>(), image))
+        {
+            HideWindow();
+            return;
+        }
+
+        if (cfg.Presentation == AlertPresentation.WindowsToast)
+        {
+            GuardLog.Warn("[alert] 指定只用 Windows 通知，但「已关闭」提示发送失败");
+            return;
+        }
+
+        Dispatcher.UIThread.Post(() =>
+        {
+            try
+            {
+                _window ??= CreateWindow();
+                _window.Present(title, body, Array.Empty<ToastActionButton>(), image);
+                var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+                timer.Tick += (_, _) =>
+                {
+                    timer.Stop();
+                    _window?.HideSafe();
+                };
+                timer.Start();
+            }
+            catch (Exception ex)
+            {
+                GuardLog.Error("[alert] 关闭提示弹窗失败", ex);
             }
         });
     }
@@ -120,11 +167,11 @@ public sealed class CameraAlertService
     }
 
     /// <summary>解析配图路径：相对路径按插件目录算，文件不存在就当没有。</summary>
-    private string? ResolveImagePath()
+    private string? ResolveImagePath(string? configured)
     {
         try
         {
-            var full = MikuGuardPaths.Resolve(_settings.Alert.ImagePath);
+            var full = MikuGuardPaths.Resolve(configured ?? "");
             if (full.Length == 0) return null;
 
             if (!File.Exists(full))
@@ -170,5 +217,14 @@ public sealed class CameraAlertService
         var app = string.IsNullOrWhiteSpace(alert.AppDisplay) ? "某个程序" : alert.AppDisplay;
         var device = string.IsNullOrWhiteSpace(alert.DeviceName) ? "摄像头" : $"{alert.DeviceName}";
         return $"{app} 正在使用{device}，请注意隐私安全！";
+    }
+
+    private static string BuildClosedBody(GuardAlert? alert)
+    {
+        var device = string.IsNullOrWhiteSpace(alert?.DeviceName) ? "摄像头" : alert!.DeviceName;
+        var app = alert == null || string.IsNullOrWhiteSpace(alert.AppDisplay) ? "" : $"{alert.AppDisplay} ";
+        return string.IsNullOrEmpty(app)
+            ? $"{device} 已经关闭，危机解除。"
+            : $"{app}已停止使用{device}，危机解除。";
     }
 }

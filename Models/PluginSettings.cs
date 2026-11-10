@@ -58,6 +58,12 @@ public partial class MonitorSettings : ObservableObject
     [ObservableProperty]
     private string _deviceName = "";
 
+    /// <summary>
+    /// 只对选定的那台摄像头报警。开启后会用试开的方式确认占用的是不是它，
+    /// 别的摄像头被调用时不亮指示点也不弹提醒。
+    /// </summary>
+    [ObservableProperty]
+    private bool _strictDevice = true;
 }
 
 /// <summary>程序过滤设置。</summary>
@@ -99,6 +105,21 @@ public partial class AlertSettings : ObservableObject
     /// <summary>提醒里显示的图片（相对路径按插件目录解析）。留空则不显示图片。</summary>
     [ObservableProperty]
     private string _imagePath = @"Assets\monitoring.jpg";
+
+    /// <summary>
+    /// 摄像头被关掉之后再提示一次（危机解除）。只有本次真的弹过「正在被使用」提醒才会发，
+    /// 平时摄像头没被用过、或者用过但没报警，都不会发。
+    /// </summary>
+    [ObservableProperty]
+    private bool _notifyOnClosed = true;
+
+    /// <summary>「摄像头已关闭」提示的标题。</summary>
+    [ObservableProperty]
+    private string _closedTitle = "摄像头已关闭";
+
+    /// <summary>「摄像头已关闭」提示的配图。</summary>
+    [ObservableProperty]
+    private string _closedImagePath = @"Assets\monitoring_off.jpg";
 }
 
 /// <summary>插件根设置。</summary>

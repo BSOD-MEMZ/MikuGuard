@@ -38,14 +38,36 @@ public partial class CameraGuardSettingsPage : SettingsPageBase
 
     private async void OnBrowseImageClick(object? sender, RoutedEventArgs e)
     {
+        var path = await PickImageAsync("选择提醒配图");
+        if (!string.IsNullOrEmpty(path)) ViewModel.Settings.Alert.ImagePath = path;
+    }
+
+    private void OnResetImageClick(object? sender, RoutedEventArgs e)
+    {
+        ViewModel.Settings.Alert.ImagePath = @"Assets\monitoring.jpg";
+    }
+
+    private async void OnBrowseClosedImageClick(object? sender, RoutedEventArgs e)
+    {
+        var path = await PickImageAsync("选择「摄像头已关闭」配图");
+        if (!string.IsNullOrEmpty(path)) ViewModel.Settings.Alert.ClosedImagePath = path;
+    }
+
+    private void OnResetClosedImageClick(object? sender, RoutedEventArgs e)
+    {
+        ViewModel.Settings.Alert.ClosedImagePath = @"Assets\monitoring_off.jpg";
+    }
+
+    private async Task<string?> PickImageAsync(string title)
+    {
         try
         {
             var topLevel = TopLevel.GetTopLevel(this);
-            if (topLevel == null) return;
+            if (topLevel == null) return null;
 
             var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
-                Title = "选择提醒配图",
+                Title = title,
                 AllowMultiple = false,
                 FileTypeFilter = new[]
                 {
@@ -53,20 +75,13 @@ public partial class CameraGuardSettingsPage : SettingsPageBase
                 }
             });
 
-            var path = files.FirstOrDefault()?.TryGetLocalPath();
-            if (string.IsNullOrEmpty(path)) return;
-
-            ViewModel.Settings.Alert.ImagePath = path;
+            return files.FirstOrDefault()?.TryGetLocalPath();
         }
         catch (Exception ex)
         {
-            GuardLog.Error("[settings] 选择配图失败", ex);
+            GuardLog.Error("[settings] 选择图片失败", ex);
+            return null;
         }
-    }
-
-    private void OnResetImageClick(object? sender, RoutedEventArgs e)
-    {
-        ViewModel.Settings.Alert.ImagePath = @"Assets\monitoring.jpg";
     }
 
     private async void OnBrowseExeClick(object? sender, RoutedEventArgs e)

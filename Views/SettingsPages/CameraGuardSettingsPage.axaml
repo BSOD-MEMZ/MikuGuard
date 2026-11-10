@@ -71,6 +71,15 @@
                 </fa:SettingsExpander.Footer>
             </fa:SettingsExpander>
 
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE7B8;}"
+                                 Header="只提示选定摄像头"
+                                 Description="其它摄像头被调用时不显示指示点和弹出提醒。">
+                <fa:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.Monitor.StrictDevice, Mode=TwoWay}"
+                                  IsEnabled="{Binding HasConcreteDevice}" />
+                </fa:SettingsExpander.Footer>
+            </fa:SettingsExpander>
+
             <TextBlock Text="程序过滤" FontSize="14" FontWeight="SemiBold" Margin="2,14,0,2" />
 
             <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE833;}"
@@ -125,7 +134,7 @@
 
             <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE075;}"
                                  Header="正在使用摄像头的程序"
-                                 Description="系统访问记录里当前处于使用中的程序。"
+                                 Description="系统访问记录里当前处于使用中的程序；标「已忽略」的不会亮指示点也不会弹提醒。"
                                  IsExpanded="True">
                 <StackPanel>
                     <ItemsControl ItemsSource="{Binding DetectedApps}">
@@ -134,8 +143,13 @@
                                 <fa:SettingsExpanderItem Content="{Binding DisplayName}"
                                                          Description="{Binding Key}">
                                     <fa:SettingsExpanderItem.Footer>
-                                        <Button Content="加入名单" VerticalAlignment="Center"
-                                                Click="OnAddDetectedClick" />
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Text="已忽略" FontSize="12" Opacity="0.7"
+                                                       VerticalAlignment="Center"
+                                                       IsVisible="{Binding Ignored}" />
+                                            <Button Content="加入名单" VerticalAlignment="Center"
+                                                    Click="OnAddDetectedClick" />
+                                        </StackPanel>
                                     </fa:SettingsExpanderItem.Footer>
                                 </fa:SettingsExpanderItem>
                             </DataTemplate>
@@ -204,6 +218,26 @@
                 </fa:SettingsExpander.Footer>
             </fa:SettingsExpander>
 
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE7E8;}"
+                                 Header="摄像头关闭后提示"
+                                 Description="摄像头关闭后提醒危机解除。">
+                <fa:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.Alert.NotifyOnClosed, Mode=TwoWay}" />
+                </fa:SettingsExpander.Footer>
+            </fa:SettingsExpander>
+
+            <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE9B2;}"
+                                 Header="关闭提示配图"
+                                 Description="摄像头已关闭提醒用的图片。">
+                <fa:SettingsExpander.Footer>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBox Width="200" Text="{Binding Settings.Alert.ClosedImagePath, Mode=TwoWay}" />
+                        <Button Content="浏览…" Click="OnBrowseClosedImageClick" />
+                        <Button Content="恢复默认" Click="OnResetClosedImageClick" />
+                    </StackPanel>
+                </fa:SettingsExpander.Footer>
+            </fa:SettingsExpander>
+
             <fa:SettingsExpander IconSource="{ci:FluentIconSource &#xE671;}"
                                  Header="「消除提醒」按钮"
                                  Description="单击此按钮关闭提醒。">
@@ -240,7 +274,12 @@
                         <Button Content="重新注册通知" Command="{Binding ReRegisterToastCommand}" />
                         <Button Content="注销通知身份" Command="{Binding UnregisterToastCommand}" />
                         <Button Content="重启监控" Command="{Binding RestartMonitorCommand}" />
+                        <Button Content="测试设备判定" Command="{Binding ProbeDeviceCommand}"
+                                IsEnabled="{Binding HasConcreteDevice}"
+                                ToolTip.Tip="对选定的摄像头试开一次，看这条路在这台机器上准不准" />
                     </StackPanel>
+                    <TextBlock Text="{Binding ProbeText}" FontSize="12" Opacity="0.7"
+                               TextWrapping="Wrap" Margin="16,0,16,0" />
                     <TextBlock Text="{Binding LastActionText}" FontSize="12" Opacity="0.7"
                                TextWrapping="Wrap" Margin="16,0,16,10" />
                 </StackPanel>

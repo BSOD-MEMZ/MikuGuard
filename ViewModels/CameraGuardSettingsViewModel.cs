@@ -40,6 +40,10 @@ public partial class CameraGuardSettingsViewModel : ObservableObject
     [ObservableProperty]
     private string _lastActionText = "";
 
+    /// <summary>「测试设备判定」的结果，单独放一格，免得被每秒刷新的状态覆盖。</summary>
+    [ObservableProperty]
+    private string _probeText = "";
+
     public CameraGuardSettingsViewModel(PluginSettings settings)
     {
         Settings = settings;
@@ -148,7 +152,8 @@ public partial class CameraGuardSettingsViewModel : ObservableObject
 
         var current = _service.DetectedApps;
         var sameSet = current.Count == DetectedApps.Count &&
-                      current.Select(x => x.Key).SequenceEqual(DetectedApps.Select(x => x.Key), StringComparer.OrdinalIgnoreCase);
+                      current.Select(x => x.Key).SequenceEqual(DetectedApps.Select(x => x.Key), StringComparer.OrdinalIgnoreCase) &&
+                      current.Select(x => x.Ignored).SequenceEqual(DetectedApps.Select(x => x.Ignored));
         if (!sameSet)
         {
             DetectedApps.Clear();
@@ -236,6 +241,28 @@ public partial class CameraGuardSettingsViewModel : ObservableObject
     {
         _service?.Restart();
         RefreshDetected();
+    }
+
+    /// <summary>诊断用：对着选定摄像头跑一次试开判定，看看这条路在你机器上准不准。</summary>
+    [RelayCommand]
+    private async Task ProbeDevice()
+    {
+        var device = SelectedDevice;
+        if (device == null || string.IsNullOrEmpty(device.Id))
+        {
+            ProbeText = "先在「监视目标」里选一台具体摄像头";
+            return;
+        }
+
+        ProbeText = $"正在试开「{device.Name}」…";
+        var result = await Task.Run(() => CameraDeviceBusyProbe.IsBusy(device.Id));
+
+        ProbeText = result switch
+        {
+            true => $"「{device.Name}」打不开 → 判定为被占用",
+            false => $"「{device.Name}」能打开 → 判定为空闲（如果它真在被用，说明这个驱动不拦第二次打开）",
+            _ => $"「{device.Name}」判定不出来 → 实际检测时会按「被占用」处理"
+        };
     }
 
     private static string? IconPath()

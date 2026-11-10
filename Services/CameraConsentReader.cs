@@ -20,6 +20,12 @@ public sealed class AppIdentity
     public string FileName =>
         IsPackaged ? "" : Path.GetFileName(Key);
 
+    /// <summary>
+    /// 这个程序当前是否被忽略（黑名单内的、或白名单模式下不在名单里的）。
+    /// 被忽略的程序既不亮指示点也不弹提醒，只用于设置页展示。
+    /// </summary>
+    public bool Ignored { get; set; }
+
     public override string ToString() => DisplayName;
 }
 
