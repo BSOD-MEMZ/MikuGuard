@@ -1,0 +1,9 @@
+MFStartup
+MFShutdown
+MF_VERSION
+MFCreateSensorActivityMonitor
+IMFSensorActivitiesReportCallback
+IMFSensorActivitiesReport
+IMFSensorActivityReport
+IMFSensorActivityMonitor
+IMFSensorProcessActivity

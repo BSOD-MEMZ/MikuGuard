@@ -59,7 +59,7 @@ public partial class MonitorSettings : ObservableObject
     private string _deviceName = "";
 
     /// <summary>
-    /// 只对选定的那台摄像头报警。开启后会用试开的方式确认占用的是不是它，
+    /// 只对选定的那台摄像头报警：MF 上报的设备 id 和它精确匹配才算数，
     /// 别的摄像头被调用时不亮指示点也不弹提醒。
     /// </summary>
     [ObservableProperty]

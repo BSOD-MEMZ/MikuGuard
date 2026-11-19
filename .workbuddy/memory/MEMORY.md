@@ -31,6 +31,9 @@ ClassIsland 插件（manifest id `mikuguard.camera-guard`），摄像头安全�
 
 ## 设计约束
 
+- **摄像头占用只信 MF 传感器活动监控**（`IMFSensorActivityMonitor`）：24H2 起 ConsentStore
+  不再更新、FrameServer 架构下 `CreateFile` 独占打开也判不出占用（见 2026-11-19）。
+  不要改回去。
 - **判断宿主里能干什么，不要用独立 exe 试**：Toast 在独立 console 里必失败（0x80070490），在宿主里正常。验证要起真宿主。
 - **空闲时不要探测设备占用**：DirectShow 绑定会短暂打开摄像头（可能让 LED 闪），只在系统记录显示有程序在用摄像头时才探。
 - **Toast 三件套缺一不可**（AUMID 注册表 + LocalServer32 + 开始菜单 lnk），注册必须幂等，且提供注销入口。

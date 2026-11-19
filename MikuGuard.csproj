@@ -21,6 +21,11 @@
     <PackageReference Include="ClassIsland.PluginSdk" Version="2.0.0.2">
       <ExcludeAssets>runtime;native</ExcludeAssets>
     </PackageReference>
+    <!-- Media Foundation 传感器活动监控（IMFSensorActivityMonitor）的 C# 互操作 -->
+    <PackageReference Include="Microsoft.Windows.CsWin32" Version="0.3.275">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <!--

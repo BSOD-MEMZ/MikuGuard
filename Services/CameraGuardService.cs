@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MikuGuard.Models;
@@ -30,10 +32,6 @@ public sealed class CameraGuardService : ObservableObject, IDisposable
     private GuardAlert? _lastAlert;
     private DateTime _inUseSinceUtc = DateTime.MinValue;
 
-    // 设备探测结果缓存：同一批在用程序下只探一次（试开会短暂打开摄像头，不能每次都探）
-    private string? _probeSignature;
-    private string _probeDeviceId = "";
-    private bool _probeBusy = true;
     private int _polling;
 
     public List<CameraDeviceInfo> Devices { get; private set; } = new();
@@ -88,6 +86,10 @@ public sealed class CameraGuardService : ObservableObject, IDisposable
         {
             RefreshDevices();
             _alertService.Initialize(iconPath);
+
+            if (!CameraDeviceBusyProbe.Start())
+                GuardLog.Warn("[guard] 摄像头活动监控启动失败，退回注册表检测（新系统上可能读不到）");
+
             Restart();
             GuardLog.Info($"[guard] 已启动（摄像头：{DescribeTarget()}，间隔 {_settings.Monitor.PollingIntervalMs}ms）");
         }
@@ -120,9 +122,6 @@ public sealed class CameraGuardService : ObservableObject, IDisposable
     public void Restart()
     {
         StopTimer();
-
-        // 设置变了就重新判一次设备占用，别拿旧结论压着
-        _probeSignature = null;
 
         if (!_settings.Monitor.Enabled)
         {
@@ -157,10 +156,10 @@ public sealed class CameraGuardService : ObservableObject, IDisposable
 
         try
         {
-            var consent = ReadActiveApps();
-            var detection = Detect(consent);
+            var active = ReadActiveApps();
+            var detection = Detect(active);
 
-            DetectedApps = consent;
+            DetectedApps = active.Select(a => a.App).ToList();
 
             var appChanged = !string.Equals(detection.App?.Key, _lastAppKey, StringComparison.OrdinalIgnoreCase);
             var becameActive = detection.InUse && !_wasInUse;
@@ -210,75 +209,162 @@ public sealed class CameraGuardService : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>读系统访问记录，顺手剔掉宿主自己（预览窗口、探测试开都会记在 ClassIsland 头上）。</summary>
-    private List<AppIdentity> ReadActiveApps()
+    /// <summary>
+    /// 取「当前正在使用摄像头」的程序。主路径是 Media Foundation 传感器活动监控
+    /// （设备 + pid 都是系统给的），监控起不来时才退回旧的 ConsentStore 记录。
+    /// </summary>
+    private List<ActiveApp> ReadActiveApps()
     {
-        var list = CameraConsentReader.ReadActive();
+        var result = new List<ActiveApp>();
 
-        var self = Environment.ProcessPath;
-        if (!string.IsNullOrEmpty(self))
-            list.RemoveAll(a => !a.IsPackaged && string.Equals(a.Key, self, StringComparison.OrdinalIgnoreCase));
+        foreach (var activity in CameraDeviceBusyProbe.Snapshot())
+        {
+            foreach (var pid in activity.ProcessIds)
+            {
+                var app = ToAppIdentity(pid);
+                if (app is null) continue;
+                if (result.Any(r => string.Equals(r.App.Key, app.Key, StringComparison.OrdinalIgnoreCase))) continue;
 
-        foreach (var app in list) app.Ignored = !IsWatched(app);
-        return list;
+                app.Ignored = !IsWatched(app);
+                result.Add(new ActiveApp(app, activity.DeviceId, activity.DeviceName));
+            }
+        }
+
+        // 传感器监控不可用（老系统 / MF 初始化失败）时退回注册表：24H2 之后系统不再写这个记录
+        if (result.Count == 0 && !CameraDeviceBusyProbe.IsRunning)
+        {
+            var self = Environment.ProcessPath;
+            foreach (var app in CameraConsentReader.ReadActive())
+            {
+                if (!string.IsNullOrEmpty(self) && !app.IsPackaged &&
+                    string.Equals(app.Key, self, StringComparison.OrdinalIgnoreCase)) continue;
+
+                app.Ignored = !IsWatched(app);
+                result.Add(new ActiveApp(app, _settings.Monitor.DeviceId, _settings.Monitor.DeviceName));
+            }
+        }
+
+        return result;
     }
 
-    private Detection Detect(List<AppIdentity> consent)
+    private Detection Detect(List<ActiveApp> active)
     {
         var cfg = _settings.Monitor;
-        var device = string.IsNullOrWhiteSpace(cfg.DeviceId)
-            ? null
-            : Devices.FirstOrDefault(d => string.Equals(d.Id, cfg.DeviceId, StringComparison.OrdinalIgnoreCase));
+        var watched = active.Where(a => IsWatched(a.App)).ToList();
 
-        var deviceName = string.IsNullOrWhiteSpace(cfg.DeviceId) ? "" : cfg.DeviceName;
+        // 选定了具体设备且要求严格匹配时，只看那台摄像头的占用
+        if (!string.IsNullOrWhiteSpace(cfg.DeviceId) && cfg.StrictDevice)
+        {
+            watched = watched
+                .Where(a => string.Equals(a.DeviceId, cfg.DeviceId, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        var preferred = watched.FirstOrDefault();
+        var deviceId = preferred.DeviceId ?? cfg.DeviceId;
+        var deviceName = !string.IsNullOrWhiteSpace(preferred.DeviceName) ? preferred.DeviceName : cfg.DeviceName;
+        var device = Devices.FirstOrDefault(d => string.Equals(d.Id, deviceId, StringComparison.OrdinalIgnoreCase));
         var instanceId = device?.InstanceId ?? "";
 
-        // 第一层：被忽略的程序（黑名单内 / 白名单外）既不亮点也不提醒
-        var watched = consent.Where(IsWatched).ToList();
-        if (watched.Count == 0)
+        if (preferred.App is null)
         {
-            var note = consent.Count == 0
-                ? ""
-                : $"{consent[0].DisplayName} 正在使用摄像头（已忽略，不提示）";
+            var note = "";
+            if (active.Count > 0)
+            {
+                note = !string.IsNullOrWhiteSpace(cfg.DeviceId) && cfg.StrictDevice
+                    ? $"{active[0].App.DisplayName} 正在使用其它摄像头（不是监视的这台，不提示）"
+                    : $"{active[0].App.DisplayName} 正在使用摄像头（已忽略，不提示）";
+            }
+
             return new Detection(false, null, deviceName, instanceId, cfg.DeviceId, note);
         }
 
-        // 第二层：选了具体某一台时，只有「它自己」真的被占用才算在用
-        if (!string.IsNullOrWhiteSpace(cfg.DeviceId) && cfg.StrictDevice)
-        {
-            var signature = string.Join("|", consent.Select(a => a.Key).OrderBy(k => k, StringComparer.OrdinalIgnoreCase));
-            if (!IsSelectedDeviceBusy(signature, cfg.DeviceId))
-                return new Detection(false, null, deviceName, instanceId, cfg.DeviceId,
-                    $"{watched[0].DisplayName} 正在使用其它摄像头（不是监视的这台，不提示）");
-        }
-
-        return new Detection(true, watched[0], deviceName, instanceId, cfg.DeviceId, "");
+        return new Detection(true, preferred.App, deviceName, instanceId, deviceId, "");
     }
 
-    /// <summary>
-    /// 选定摄像头是不是被占用的那台。试开一次（会短暂打开摄像头），结果按「当前在用程序集合」缓存。
-    /// 判定不出来时按「被占用」处理：宁可多报，不用假信号压掉真实告警。
-    /// </summary>
-    private bool IsSelectedDeviceBusy(string signature, string deviceId)
+    /// <summary>把「正在用摄像头的进程」还原成插件里的程序身份（桌面程序用 exe 路径，UWP 用包族名）。</summary>
+    private static AppIdentity? ToAppIdentity(uint pid)
     {
-        if (string.Equals(_probeSignature, signature, StringComparison.Ordinal) &&
-            string.Equals(_probeDeviceId, deviceId, StringComparison.OrdinalIgnoreCase))
-            return _probeBusy;
+        if (pid == 0 || pid == (uint)Environment.ProcessId) return null;
 
-        _probeSignature = signature;
-        _probeDeviceId = deviceId;
-
-        var result = CameraDeviceBusyProbe.IsBusy(deviceId);
-        _probeBusy = result ?? true;
-
-        GuardLog.Info($"[guard] 设备探测「{_settings.Monitor.DeviceName}」：" + result switch
+        Process? process = null;
+        try
         {
-            true => "正在被占用",
-            false => "空闲（占用的是别的摄像头）",
-            _ => "无法判定，按被占用处理"
-        });
+            process = Process.GetProcessById((int)pid);
+            var processName = process.ProcessName;
 
-        return _probeBusy;
+            string path = "";
+            try { path = process.MainModule?.FileName ?? ""; } catch { }
+
+            if (path.Contains(@"\WindowsApps\", StringComparison.OrdinalIgnoreCase))
+            {
+                var family = GetPackageFamilyName(process);
+                var key = family.Length > 0 ? family : processName;
+                return new AppIdentity
+                {
+                    Key = key,
+                    DisplayName = PackagedDisplayName(key) ?? processName,
+                    IsPackaged = family.Length > 0,
+                    StartedAt = TryStartTime(process)
+                };
+            }
+
+            return new AppIdentity
+            {
+                Key = path.Length > 0 ? path : processName,
+                DisplayName = path.Length > 0 ? Path.GetFileName(path) : processName,
+                IsPackaged = false,
+                StartedAt = TryStartTime(process)
+            };
+        }
+        catch
+        {
+            return null;
+        }
+        finally
+        {
+            process?.Dispose();
+        }
+    }
+
+    private static DateTime? TryStartTime(Process process)
+    {
+        try { return process.StartTime; }
+        catch { return null; }
+    }
+
+    private static string GetPackageFamilyName(Process process)
+    {
+        try
+        {
+            uint length = 0;
+            var rc = GetPackageFamilyNameNative(process.Handle, ref length, null);
+            if (rc != 122 || length == 0) return "";   // 122 = ERROR_INSUFFICIENT_BUFFER
+
+            var buffer = new char[length];
+            rc = GetPackageFamilyNameNative(process.Handle, ref length, buffer);
+            return rc == 0 ? new string(buffer).TrimEnd('\0') : "";
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
+    private static string? PackagedDisplayName(string familyOrName)
+    {
+        try
+        {
+            var package = new Windows.Management.Deployment.PackageManager().FindPackage(familyOrName);
+            if (package != null && !string.IsNullOrWhiteSpace(package.DisplayName)) return package.DisplayName;
+        }
+        catch
+        {
+            // 包已经卸载 / 不是包族名
+        }
+
+        var bang = familyOrName.IndexOf('_');
+        return bang > 0 ? familyOrName[..bang] : null;
     }
 
     private void TryAlert(Detection detection)
@@ -425,7 +511,15 @@ public sealed class CameraGuardService : ObservableObject, IDisposable
         if (_disposed) return;
         _disposed = true;
         StopTimer();
+        CameraDeviceBusyProbe.Stop();
     }
+
+    /// <summary>一条「程序正在用某台摄像头」的记录。</summary>
+    private readonly record struct ActiveApp(AppIdentity App, string DeviceId, string DeviceName);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern int GetPackageFamilyNameNative(IntPtr hProcess, ref uint packageFamilyNameLength,
+        [Out] char[]? packageFamilyName);
 
     /// <summary>
     /// 检测结果。InUse 是「要不要提示」的最终结论（被忽略的程序、非选定摄像头都已排除），

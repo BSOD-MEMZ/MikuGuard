@@ -20,9 +20,9 @@ public sealed class CameraDeviceInfo
 }
 
 /// <summary>
-/// 摄像头设备枚举 / 占用探测 / 启停。
-/// 设备名走 cfgmgr32 + 注册表（纯读，零副作用）；占用探测走 DirectShow 设备绑定
-/// （绑定失败即说明设备被别人独占）。
+/// 摄像头设备枚举 / 启停。
+/// 设备名走 cfgmgr32 + 注册表（纯读，零副作用）；占用判定不在这里，
+/// 由 <see cref="CameraDeviceBusyProbe"/> 走 Media Foundation 的传感器活动监控。
 /// </summary>
 public static class CameraDeviceService
 {

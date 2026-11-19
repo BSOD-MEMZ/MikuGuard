@@ -254,15 +254,13 @@ public partial class CameraGuardSettingsViewModel : ObservableObject
             return;
         }
 
-        ProbeText = $"正在试开「{device.Name}」…";
-        var result = await Task.Run(() => CameraDeviceBusyProbe.IsBusy(device.Id));
+        ProbeText = $"正在查询「{device.Name}」…";
+        var activities = await Task.Run(() => CameraDeviceBusyProbe.Snapshot());
+        var hit = activities.FirstOrDefault(a => string.Equals(a.DeviceId, device.Id, StringComparison.OrdinalIgnoreCase));
 
-        ProbeText = result switch
-        {
-            true => $"「{device.Name}」打不开 → 判定为被占用",
-            false => $"「{device.Name}」能打开 → 判定为空闲（如果它真在被用，说明这个驱动不拦第二次打开）",
-            _ => $"「{device.Name}」判定不出来 → 实际检测时会按「被占用」处理"
-        };
+        ProbeText = hit is { IsBusy: true }
+            ? $"「{device.Name}」正在被占用（进程：{string.Join("、", hit.ProcessIds)}）"
+            : $"「{device.Name}」当前没有被占用";
     }
 
     private static string? IconPath()
